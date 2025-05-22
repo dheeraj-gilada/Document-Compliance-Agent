@@ -65,30 +65,31 @@ async def run_document_processing(docs_dir_to_process: str, consolidated_rules_i
         "loaded_document_data": None,
         "processed_documents": [],
         "error_messages": [],
-        "all_compliance_findings": [] 
+        "aggregated_compliance_findings": [] 
     }
 
     final_graph_state = None
     try:
-        async for event in app.astream_events(initial_state, version="v1"):
-            kind = event["event"]
-            if kind == "on_chain_end":
-                if event["name"] == "LangGraph": 
-                    final_graph_state = event["data"]["output"]
-                    logger.info("Document processing workflow completed.")
-            elif kind == "on_chain_error":
-                logger.error(f"Error in workflow: {event['data']}")
-                # Potentially capture or handle specific errors if needed
+        logger.info(f"Invoking document processing workflow with initial state: {initial_state}")
+        # Use ainvoke to get the final state directly
+        final_graph_state = await app.ainvoke(initial_state, config={"recursion_limit": 100})
+        
+        logger.info(f"DEBUG run_document_processing: ainvoke completed. Raw output type: {type(final_graph_state)}")
+        # Some LangServe setups might wrap the output in a list
+        if isinstance(final_graph_state, list) and final_graph_state and isinstance(final_graph_state[0], dict):
+            final_graph_state = final_graph_state[0]
+            logger.info("Extracted final state dictionary from the first element of a list after ainvoke.")
+        elif not isinstance(final_graph_state, dict):
+            logger.error(f"ainvoke did not return a dictionary or a list containing a dictionary. Type: {type(final_graph_state)}, Content: {str(final_graph_state)[:500]}...")
+            # Return a default error state if the output is not as expected
+            return {"processed_documents": [], "aggregated_compliance_findings": [], "error_messages": [f"Workflow returned unexpected data type: {type(final_graph_state)}"]}
 
-        if final_graph_state:
-            return final_graph_state
-        else:
-            logger.error("Workflow did not complete successfully or final state not captured.")
-            return {"processed_documents": initial_state.get("processed_documents", []), "all_compliance_findings": [], "error_messages": initial_state.get("error_messages", []) + ["Workflow did not reach final state."]}
+        logger.info("Document processing workflow completed.")
+        return final_graph_state
 
     except Exception as e:
-        logger.error(f"Exception during document processing workflow execution: {e}", exc_info=True)
-        return {"processed_documents": [], "all_compliance_findings": [], "error_messages": [f"Workflow execution failed: {str(e)}"]}
+        logger.error(f"Exception during document processing workflow execution (ainvoke): {e}", exc_info=True)
+        return {"processed_documents": [], "aggregated_compliance_findings": [], "error_messages": [f"Workflow execution failed: {str(e)}"]}
 
 async def main():
     parser = argparse.ArgumentParser(description="Intelligent Document Compliance & Process Automation Agent")
@@ -128,21 +129,13 @@ async def main():
         
         processed_workflow_output = await run_document_processing(args.docs_dir, rules_for_workflow)
         
-        logger.info(f"DEBUG main: processed_workflow_output type: {type(processed_workflow_output)}")
-        if isinstance(processed_workflow_output, dict) or hasattr(processed_workflow_output, 'keys'):
-            output_top_keys = list(processed_workflow_output.keys())
-            logger.info(f"DEBUG main: processed_workflow_output top-level keys: {output_top_keys}")
-            if 'universal_compliance_check' in output_top_keys and \
-               (isinstance(processed_workflow_output.get('universal_compliance_check'), dict) or \
-                hasattr(processed_workflow_output.get('universal_compliance_check'), 'keys')):
-                actual_state_data = processed_workflow_output['universal_compliance_check']
-            elif 'processed_documents' in output_top_keys: 
-                actual_state_data = processed_workflow_output
-            else:
-                logger.warning("DEBUG main: Could not determine structure of processed_workflow_output.")
-                actual_state_data = {}
+        logger.info(f"DEBUG main: processed_workflow_output received. Type: {type(processed_workflow_output)}")
+
+        if isinstance(processed_workflow_output, dict):
+            actual_state_data = processed_workflow_output
+            logger.info(f"DEBUG main: actual_state_data assigned directly from processed_workflow_output (dict). Keys: {list(actual_state_data.keys())}")
         else:
-            logger.error("DEBUG main: processed_workflow_output is not dictionary-like.")
+            logger.warning(f"DEBUG main: processed_workflow_output is not a dictionary. Type: {type(processed_workflow_output)}. Content: {str(processed_workflow_output)[:500]}... Assigning empty dict to actual_state_data.") # Log content snippet
             actual_state_data = {}
 
         processed_documents_list = actual_state_data.get('processed_documents', [])
@@ -156,9 +149,9 @@ async def main():
         logger.info(f"Extracted data for {len(processed_documents_list)} documents saved to {args.extraction_output_file}")
 
         if args.mode == 'full':
-            all_findings = actual_state_data.get('all_compliance_findings', [])
+            all_findings = actual_state_data.get('aggregated_compliance_findings', [])
             if not isinstance(all_findings, list):
-                logger.warning(f"'all_compliance_findings' in actual_state_data is not a list. Defaulting to empty list.")
+                logger.warning(f"'aggregated_compliance_findings' in actual_state_data is not a list. Defaulting to empty list.")
                 all_findings = []
 
     if args.mode == 'compliance':

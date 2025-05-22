@@ -64,6 +64,43 @@ class UniversalComplianceAgent:
     The final output must be a single JSON array of these findings.
     """
 
+    SINGLE_RULE_SYSTEM_PROMPT = """
+You are a meticulous Universal Compliance Agent. Your task is to evaluate a SINGLE compliance rule against a provided set of documents.
+
+**Input:**
+1.  **Rule ID:** The identifier of the rule (e.g., "1a", "7").
+2.  **Rule Text:** The specific compliance rule text to evaluate.
+3.  **Documents Data:** A list of dictionaries, where each dictionary represents a document. Each document dictionary contains:
+    *   `"filename"`: The name of the document file.
+    *   `"doc_type"`: The type of the document (e.g., "Invoice", "Purchase Order", "Shipping Manifest").
+    *   `"extracted_data"`: A dictionary of key-value pairs extracted from the document.
+
+**Your Task:**
+Carefully analyze the provided **Rule Text** and determine its compliance status based on the **Documents Data**.
+Consider ALL provided documents when evaluating the rule, as some rules may require information from multiple documents or depend on the presence/absence of specific document types.
+
+**Output Format:**
+You MUST output a SINGLE JSON object representing the compliance finding for the given rule. The JSON object should have the following structure:
+{
+    "rule_id": "<The Rule ID provided to you>",
+    "rule_checked": "<The Rule Text provided to you>",
+    "status": "<compliant | non-compliant | not_applicable>",
+    "details": "<A clear, concise explanation of your finding. 
+                 - If 'compliant', briefly state why.
+                 - If 'non-compliant', clearly explain the violation and what is missing or incorrect.
+                 - If 'not_applicable', explain why the rule does not apply to the given set of documents (e.g., required document type not present, or conditions for the rule are not met by any document). If this is because the rule targets a specific document type (e.g., 'Purchase Order') and no such documents were provided, explicitly state this connection.
+                 Provide specific examples or data points from the documents if they support your finding.>",
+    "involved_documents": ["<filename1.pdf>", "<filename2.txt>"] // List of filenames of documents that were relevant to this rule's evaluation (even if the rule was 'not_applicable' because a certain document type was missing).
+}
+
+**Important Considerations:**
+*   **Scope:** Evaluate ONLY the single rule provided.
+*   **Accuracy:** Be precise. Base your findings strictly on the data within the provided documents.
+*   **Clarity:** Ensure your 'details' field is easy to understand.
+*   **Involved Documents:** List all documents that you considered or that influenced your decision for this specific rule. If a rule is 'not_applicable' because a 'Purchase Order' is required but none was provided, list all document filenames that were checked.
+*   **JSON Format:** Ensure your output is a valid JSON object as specified.
+"""
+
     def __init__(self, model_name: str = "gpt-4o-mini", temperature: float = 0.0):
         # Using temperature 0.0 for more deterministic compliance checks
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -183,3 +220,82 @@ class UniversalComplianceAgent:
         except Exception as e:
             logger.error(f"Error during universal compliance check with LLM: {e}", exc_info=True)
             return [{"rule_id": "N/A", "rule_checked": "LLM Interaction Error", "status": "error", "details": f"An unexpected error occurred: {e}", "involved_documents": []}]
+
+    async def evaluate_single_rule(self, rule_id: str, rule_text: str, all_documents_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Evaluates a single compliance rule against all provided document data."""
+        logger.info(f"Evaluating single rule ID: {rule_id} - '{rule_text}' against {len(all_documents_data)} documents.")
+
+        # Prepare the content for the LLM
+        # We need to present the documents in a way the LLM can understand within the prompt context.
+        # Let's serialize the document data to a compact JSON string for inclusion.
+        documents_json_str = json.dumps(all_documents_data, indent=2)
+
+        prompt_messages = [
+            {"role": "system", "content": self.SINGLE_RULE_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Here is the rule and the documents data:\n\n**Rule ID:** {rule_id}\n\n**Rule Text:** {rule_text}\n\n**Documents Data (JSON format):**\n```json\n{documents_json_str}\n```\n\nPlease evaluate this rule and provide the compliance finding in the specified JSON format."}
+        ]
+
+        default_error_finding = {
+            "rule_id": rule_id,
+            "rule_checked": rule_text,
+            "status": "error",
+            "details": "LLM processing failed or produced invalid JSON for this rule.",
+            "involved_documents": [doc.get('filename', 'unknown_file') for doc in all_documents_data]
+        }
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=prompt_messages,
+                temperature=self.temperature,
+                response_format={"type": "json_object"}, 
+            )
+            
+            response_content = response.choices[0].message.content
+            if response_content is None:
+                logger.error(f"LLM returned empty response for rule ID: {rule_id}.")
+                return default_error_finding
+
+            # Attempt to parse the JSON response
+            # The LLM should return a single JSON object as per the prompt.
+            # Remove potential markdown backticks if present
+            if response_content.startswith("```json"): 
+                response_content = response_content[7:] 
+                if response_content.endswith("```"): 
+                    response_content = response_content[:-3] 
+            
+            response_content = response_content.strip() 
+            
+            # Ensure the response is not empty before trying to parse
+            if not response_content:
+                logger.error(f"LLM returned empty response for rule ID: {rule_id}.")
+                return default_error_finding
+
+            parsed_finding = json.loads(response_content) 
+            
+            # Basic validation of the parsed structure (can be more detailed)
+            if not all(key in parsed_finding for key in ["rule_id", "status", "details", "involved_documents"]):
+                logger.error(f"LLM response for rule ID {rule_id} is missing required keys. Response: {parsed_finding}")
+                # Augment with what was expected vs received if possible
+                parsed_finding['details'] = f"Error: LLM response structure incorrect. Original details: {parsed_finding.get('details', '')}"
+                parsed_finding['status'] = 'error'
+                # Ensure all keys exist even if some are defaulted
+                parsed_finding = {**default_error_finding, **parsed_finding, "rule_id": rule_id, "rule_checked": rule_text} 
+
+            logger.info(f"Successfully evaluated rule ID: {rule_id}. Status: {parsed_finding.get('status')}")
+            return parsed_finding
+        
+        except json.JSONDecodeError as e:
+            logger.error(f"JSONDecodeError for rule ID {rule_id}: {e}. LLM Response: {response_content[:500]}") 
+            # Return a structured error, but try to include the problematic response snippet if it's useful
+            error_details = f"LLM response was not valid JSON. Error: {e}. Response snippet: {response_content[:200]}" 
+            return {
+                "rule_id": rule_id,
+                "rule_checked": rule_text,
+                "status": "error",
+                "details": error_details,
+                "involved_documents": [doc.get('filename', 'unknown_file') for doc in all_documents_data]
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error evaluating rule ID {rule_id}: {e}", exc_info=True)
+            return default_error_finding
