@@ -31,68 +31,58 @@
           }
         },
         "consignee": {
-          "name": "Unknown",
-          "address": {
-            "country": "India"
-          }
+          "country": "India"
         },
+        "total_weight_kg": 1522,
+        "total_value_aed": 52022.86,
+        "total_value_in_words": "Fifty Two Thousand Twenty Two & 86/100 Dirhams Only",
         "line_items": [
           {
             "description": "Rubber Support",
             "hs_code": "40169990",
             "country_of_origin": "India",
-            "quantity": 552.0,
-            "unit_value": 29733,
-            "total_value": 16249.26
+            "weight": 552.0,
+            "unit_value_aed": 29733,
+            "total_value_aed": 16249.26
           },
           {
             "description": "Spring Hanger",
             "hs_code": "40169990",
-            "country_of_origin": "Unknown",
-            "quantity": 77.0,
-            "unit_value": 22.05,
-            "total_value": 6107.18
+            "weight": 77.0,
+            "unit_value_aed": 22.05,
+            "total_value_aed": 6107.18
           },
           {
             "description": "FJFF 65, FJFF 300, FJFF 75",
             "hs_code": "40169990",
             "country_of_origin": "India",
-            "quantity": 470.0,
-            "unit_value": 156.56,
-            "total_value": 16438.44
+            "weight": 470.0,
+            "unit_value_aed": 156.56,
+            "total_value_aed": 16438.44
           },
           {
             "description": "Hattersley Valves",
             "hs_code": "84818090",
             "country_of_origin": "China",
-            "quantity": 198.0,
-            "unit_value": 204.91,
-            "total_value": 5532.64
+            "weight": 198.0,
+            "unit_value_aed": 204.91,
+            "total_value_aed": 5532.64
           },
           {
             "description": "Clamp and Accessories",
-            "hs_code": "22057000",
+            "hs_code": "82057000",
             "country_of_origin": "India",
-            "quantity": 225.0,
-            "unit_value": 2.7,
-            "total_value": 7695.34
+            "weight": 225.0,
+            "unit_value_aed": 2.7,
+            "total_value_aed": 7695.34
           }
         ],
-        "total_weight": "1522 KG",
-        "total_value": {
-          "amount": 52022.86,
-          "in_words": "Fifty Two Thousand Twenty Two & 86/100 Dirhams Only"
-        },
         "customs_declaration": {
           "declaration_number": "203-04 144376-23",
           "declaration_date": "2023-08-15",
+          "exporter_vat_trn": "100060237300003",
           "port_of_loading": "Dubai Land Terminal",
           "destination": "Oman"
-        },
-        "exporter_vat_trn": "100060237300003",
-        "customs_exit_certificate": {
-          "date": "2023-08-25",
-          "exporter": "Leminar Air Conditioning Co LLC"
         }
       }
     },
@@ -113,25 +103,18 @@
         "invoice_id": "626867-ADS1-1",
         "invoice_date": "2023-08-12",
         "due_date": "2023-12-10",
-        "customer": {
-          "customer_number": "128659",
-          "name": "LEMINAR AIR CONDITIONING CO. LLC",
-          "tax_registration_number": "100060237300003",
-          "billing_address": {
-            "p_o_box": "946",
-            "city": "Ruwi",
-            "country": "Oman"
-          },
-          "contact_person": null,
-          "phone": null,
-          "fax": null
+        "customer_number": "128659",
+        "customer_name": "LEMINAR AIR CONDITIONING CO. LLC",
+        "bill_to_address": {
+          "po_box": "946",
+          "city": "Ruwi",
+          "country": "Oman"
         },
         "sales_man": "BHAVYA RAKESH",
         "purchase_order_number": "1002475",
         "delivery_note_number": "626867-ADS1-1",
         "currency": "AED",
         "exchange_rate": 1,
-        "project_name": "INTERCOMPANY",
         "line_items": [
           {
             "item_code": "WEICCO Rubber Support Insert",
@@ -150,20 +133,170 @@
         "total_amount_in_words": "AED One Hundred Sixty Eight and 70/100 Only.",
         "payment_terms": "LPO - 120 Days",
         "bank_details": {
-          "bank_name": null,
-          "branch_name": null,
-          "account_number": null,
-          "iban": null,
-          "swift_code": null
+          "bank_name": "",
+          "branch_name": "",
+          "account_number": "",
+          "iban": "",
+          "swift_code": ""
         },
         "ship_to_address": {
-          "p_o_box": "946",
+          "po_box": "946",
           "city": "Ruwi",
           "country": "Oman"
         },
         "receiver_name": "Ofelia",
-        "authorized_by": null,
-        "prepared_by": null
+        "authorized_by": ""
+      }
+    },
+    "error_message": null
+  },
+  {
+    "filename": "img3.webp",
+    "path": "/Users/dheerajgilada/Desktop/Intelligent Document Compliance & Process Automation Agent/docs/img3.webp",
+    "status": "data_extracted",
+    "doc_type": "purchase_order",
+    "extracted_text_content": "PURCHASE ORDER\n\nAd4tech Material LLC\n\n67h, Martin street Alexander road 576832 Mobile: +123456789 Email: ad4example@gmail.com\n\nLo LL go\n\nSupplier Green1 Materials LLC #34, Car street City park Honk Kong PONo: PO-001 Date: Jun 22, 2021\n\nSl. Description 1 Desktop furniture 2 Plumbing and electrical services 3 Water tank repair works Qty Rate Amount 1 $ 232.00 $ 232.00 2 $ 514.00 $ 1,028.00 2 $ 152.00 $ 304.00\n\nPayment Instructions\n\nSubtotal\n\n$ 1,564.00\n\nPay Cheque to\n\nJohn Doe\n\nTotal Paid (Jun 22, 2021) Balance Due\n\n$ 1,564.00 $ 232.00 $ 1,332.00\n\nwary\n\nAuthorized Signatory",
+    "extracted_tables_html": [
+      "<table><tbody><tr><td>Supplier</td><td>PONo:</td><td>PO-001</td></tr><tr><td>Green1 Materials LLC</td><td>Date:</td><td>Jun 22, 2021</td></tr><tr><td>#34, Car street</td><td></td><td></td></tr><tr><td>City park</td><td></td><td></td></tr></tbody></table>",
+      "<table><tbody><tr><td>Desktop furniture</td><td>1</td><td>\u00a7 232.00</td><td>$ 232.00</td></tr><tr><td>Plumbing and electrical services</td><td>2</td><td>$ 514.00</td><td>$ 1,028.00</td></tr><tr><td>Water tank repair works</td><td>2</td><td>$ 152.00</td><td>$ 304.00</td></tr></tbody></table>"
+    ],
+    "extracted_data": {
+      "purchase_order": {
+        "purchase_order_number": "PO-001",
+        "issue_date": "2021-06-22",
+        "vendor": {
+          "name": "Ad4tech Material LLC",
+          "address": {
+            "street": "67h, Martin street Alexander road",
+            "zip": "576832",
+            "country": "Unknown",
+            "contact": {
+              "mobile": "+123456789",
+              "email": "ad4example@gmail.com"
+            }
+          }
+        },
+        "supplier": {
+          "name": "Green1 Materials LLC",
+          "address": {
+            "street": "#34, Car street",
+            "city": "City park",
+            "country": "Honk Kong"
+          }
+        },
+        "line_items": [
+          {
+            "description": "Desktop furniture",
+            "quantity": 1,
+            "unit_price": 232.0,
+            "total_price": 232.0
+          },
+          {
+            "description": "Plumbing and electrical services",
+            "quantity": 2,
+            "unit_price": 514.0,
+            "total_price": 1028.0
+          },
+          {
+            "description": "Water tank repair works",
+            "quantity": 2,
+            "unit_price": 152.0,
+            "total_price": 304.0
+          }
+        ],
+        "subtotal": 1564.0,
+        "total_paid": 1564.0,
+        "balance_due": 1332.0,
+        "payment_instructions": {
+          "pay_to": "John Doe",
+          "payment_date": "2021-06-22"
+        },
+        "authorized_signatory": "Authorized Signatory"
+      }
+    },
+    "error_message": null
+  },
+  {
+    "filename": "Purchase-Order-Template-02-TemplateLab.com_.docx",
+    "path": "/Users/dheerajgilada/Desktop/Intelligent Document Compliance & Process Automation Agent/docs/Purchase-Order-Template-02-TemplateLab.com_.docx",
+    "status": "data_extracted",
+    "doc_type": "purchase_order",
+    "extracted_text_content": "CORMIER LIGHT COMPANY PURCHASE 1909  Layman Avenue, North Carolina, 28306, USA ORDER Tel: (123) 0456-1234, Fax: (123) 0456-1230, Email: info@cormierlight.com Website : www.cormierlight.com, Tax Registration Number : 58-1111111 Purchase From Deliver To Vendor Name Deliver-To-Name PO #: 189990/20 Street Address Ship To Street Address Date: 20/05/2020 City, State/Province, Zip/Post code City, State/Province, Zip/Post code Credit Terms: Cash Country Country Attn: Contact Person Attn: Contact Person Order Code Item Qty Units Unit Price Total Price 1000256 Description of Product 1 2 sets $20.00 $40.00 1000258 Description of Product 2 3 pcs $120.00 $360.00 Sub Total $400.00 Tax 10% $40.00 Freight $100.00 Paid $80.00 Balance $460.00 Templatelab.com",
+    "extracted_tables_html": [
+      "<table><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td/><td/><td/><td/></tr><tr><td/><td/><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td/><td>PURCHASE</td><td>PURCHASE</td><td/></tr><tr><td/><td/><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td>CORMIER LIGHT COMPANY</td><td/><td>PURCHASE</td><td>PURCHASE</td><td/></tr><tr><td/><td/><td>1909 Layman Avenue, North Carolina, 28306, USA</td><td>1909 Layman Avenue, North Carolina, 28306, USA</td><td>1909 Layman Avenue, North Carolina, 28306, USA</td><td>1909 Layman Avenue, North Carolina, 28306, USA</td><td/><td>ORDER</td><td>ORDER</td><td/></tr><tr><td/><td/><td>Tel: (123) 0456-1234, Fax: (123) 0456-1230, Email: info@cormierlight.com</td><td>Tel: (123) 0456-1234, Fax: (123) 0456-1230, Email: info@cormierlight.com</td><td>Tel: (123) 0456-1234, Fax: (123) 0456-1230, Email: info@cormierlight.com</td><td>Tel: (123) 0456-1234, Fax: (123) 0456-1230, Email: info@cormierlight.com</td><td/><td>ORDER</td><td>ORDER</td><td/></tr><tr><td/><td/><td>Website : www.cormierlight.com, Tax Registration Number : 58-1111111</td><td>Website : www.cormierlight.com, Tax Registration Number : 58-1111111</td><td>Website : www.cormierlight.com, Tax Registration Number : 58-1111111</td><td>Website : www.cormierlight.com, Tax Registration Number : 58-1111111</td><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td>Purchase From</td><td>Purchase From</td><td>Deliver To</td><td>Deliver To</td><td>Deliver To</td><td/><td/><td/></tr><tr><td/><td/><td>Vendor Name</td><td>Vendor Name</td><td>Deliver-To-Name</td><td>Deliver-To-Name</td><td>Deliver-To-Name</td><td>PO #:</td><td>189990/20</td><td/></tr><tr><td/><td/><td>Street Address</td><td>Street Address</td><td>Ship To Street Address</td><td>Ship To Street Address</td><td>Ship To Street Address</td><td>Date:</td><td>20/05/2020</td><td/></tr><tr><td/><td/><td>City, State/Province, Zip/Post code</td><td>City, State/Province, Zip/Post code</td><td>City, State/Province, Zip/Post code</td><td>City, State/Province, Zip/Post code</td><td>City, State/Province, Zip/Post code</td><td>Credit Terms:</td><td>Cash</td><td/></tr><tr><td/><td/><td>Country</td><td>Country</td><td>Country</td><td>Country</td><td>Country</td><td/><td/><td/></tr><tr><td/><td/><td>Attn: Contact Person</td><td>Attn: Contact Person</td><td>Attn: Contact Person</td><td>Attn: Contact Person</td><td>Attn: Contact Person</td><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td>Order Code</td><td>Item</td><td/><td>Qty</td><td>Units</td><td>Unit Price</td><td>Total Price</td><td/></tr><tr><td/><td/><td>1000256</td><td>Description of Product 1</td><td>Description of Product 1</td><td>2</td><td>sets</td><td>$20.00</td><td>$40.00</td><td/></tr><tr><td/><td/><td>1000258</td><td>Description of Product 2</td><td>Description of Product 2</td><td>3</td><td>pcs</td><td>$120.00</td><td>$360.00</td><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td>Sub Total</td><td>$400.00</td><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td>Tax 10%</td><td>$40.00</td><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td>Freight</td><td>$100.00</td><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td>Paid</td><td>$80.00</td><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td>Balance</td><td>$460.00</td><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td>Templatelab.com</td><td>Templatelab.com</td><td/></tr><tr><td/><td/><td/><td/><td/><td/><td/><td/><td/><td/></tr></table>"
+    ],
+    "extracted_data": {
+      "purchase_order": {
+        "vendor": {
+          "name": "CORMIER LIGHT COMPANY",
+          "address": {
+            "street": "1909 Layman Avenue",
+            "city": "North Carolina",
+            "state": null,
+            "zip": "28306",
+            "country": "USA"
+          },
+          "contact": {
+            "phone": "(123) 0456-1234",
+            "fax": "(123) 0456-1230",
+            "email": "info@cormierlight.com",
+            "website": "www.cormierlight.com",
+            "tax_registration_number": "58-1111111"
+          }
+        },
+        "purchase_from": {
+          "vendor_name": "Vendor Name",
+          "address": {
+            "street": "Street Address",
+            "city": "City, State/Province, Zip/Post code",
+            "state": null,
+            "zip": null,
+            "country": "Country"
+          },
+          "contact_person": "Attn: Contact Person"
+        },
+        "deliver_to": {
+          "name": "Deliver-To-Name",
+          "address": {
+            "street": "Ship To Street Address",
+            "city": "City, State/Province, Zip/Post code",
+            "state": null,
+            "zip": null,
+            "country": "Country"
+          },
+          "contact_person": "Attn: Contact Person"
+        },
+        "purchase_order_number": "189990/20",
+        "date": "2020-05-20",
+        "credit_terms": "Cash",
+        "line_items": [
+          {
+            "order_code": "1000256",
+            "description": "Description of Product 1",
+            "quantity": 2,
+            "units": "sets",
+            "unit_price": 20.0,
+            "total_price": 40.0
+          },
+          {
+            "order_code": "1000258",
+            "description": "Description of Product 2",
+            "quantity": 3,
+            "units": "pcs",
+            "unit_price": 120.0,
+            "total_price": 360.0
+          }
+        ],
+        "totals": {
+          "subtotal": 400.0,
+          "tax": {
+            "rate": 10,
+            "amount": 40.0
+          },
+          "freight": 100.0,
+          "paid": 80.0,
+          "balance": 460.0
+        }
       }
     },
     "error_message": null

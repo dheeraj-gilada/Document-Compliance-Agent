@@ -6,6 +6,8 @@ from typing import Dict, List, Any
 
 from unstructured.partition.pdf import partition_pdf
 from unstructured.partition.text import partition_text # For .txt files
+from unstructured.partition.docx import partition_docx # For .docx files
+from unstructured.partition.image import partition_image # For image files
 from unstructured.documents.elements import Element, Table # Element is general, Table is specific
 
 from src.agents.document_classifier_agent import DocumentTypeClassifierAgent
@@ -25,13 +27,13 @@ class DocumentLoader:
 
     def list_documents(self) -> List[str]:
         """
-        Lists all supported documents (.pdf, .txt) in the documents directory.
+        Lists all supported documents (.pdf, .txt, .docx, .jpeg, .jpg, .png, .webp) in the documents directory.
         """
         if not os.path.exists(self.docs_dir):
             logger.warning(f"Documents directory {self.docs_dir} does not exist.")
             return []
         
-        supported_extensions = ('.pdf', '.txt')
+        supported_extensions = ('.pdf', '.txt', '.docx', '.jpeg', '.jpg', '.png', '.webp')
         return [
             f for f in os.listdir(self.docs_dir)
             if os.path.isfile(os.path.join(self.docs_dir, f)) and 
@@ -75,6 +77,15 @@ class DocumentLoader:
             elif file_ext == '.txt':
                 logger.info(f"Processing TXT {filename}.")
                 elements = partition_text(filename=filepath, strategy='fast') 
+            elif file_ext == '.docx':
+                logger.info(f"Processing DOCX {filename}.")
+                elements = partition_docx(filename=filepath)
+            elif file_ext in ('.jpeg', '.jpg', '.png', '.webp'):
+                logger.info(f"Processing IMAGE {filename}.")
+                # For images, strategy can be 'auto', 'ocr_only', or 'hi_res'. 
+                # 'hi_res' attempts to detect layout and then OCR.
+                # OCR requires Tesseract. If not available, text_content might be empty.
+                elements = partition_image(filename=filepath, strategy='hi_res', infer_table_structure=True, extract_tables=True)
             else:
                 logger.warning(f"Unsupported file type: {file_ext} for {filename}")
                 return {
