@@ -4,6 +4,7 @@ import tempfile
 import shutil
 import asyncio
 import json
+import uuid # Added for unique rule IDs
 
 # This MUST be the first Streamlit command.
 st.set_page_config(layout="wide", page_title="Intelligent Document Compliance Agent")
@@ -31,11 +32,30 @@ if not processing_function_imported:
     run_document_processing_func = dummy_run_document_processing # Assign dummy if import failed
 
 def main_app():
+    # Initialize session state for rules if not already present
+    if 'rules_list_data' not in st.session_state:
+        st.session_state.rules_list_data = []  # List of dicts: {'id': str, 'text': str}
+    if 'current_new_rule_text' not in st.session_state: # For the 'Add Rule' input field
+        st.session_state.current_new_rule_text = ""
+
     st.title("Intelligent Document Compliance & Process Automation Agent")
 
     if not processing_function_imported:
         st.error(import_error_message)
         st.stop() # Stop further execution of the Streamlit app
+
+    # --- CALLBACK FUNCTIONS FOR RULE MANAGEMENT ---
+    def add_new_rule_callback():
+        rule_text = st.session_state.get("input_new_rule_text_key", "").strip()
+        if rule_text:
+            st.session_state.rules_list_data.append({"id": str(uuid.uuid4()), "text": rule_text})
+            st.session_state.input_new_rule_text_key = "" # Clear the input field after adding
+
+    def delete_rule_callback(rule_id_to_delete):
+        st.session_state.rules_list_data = [
+            rule for rule in st.session_state.rules_list_data if rule["id"] != rule_id_to_delete
+        ]
+    # --- END CALLBACK FUNCTIONS ---
 
     st.markdown("""
     Upload your documents and provide compliance rules to check against.
@@ -53,12 +73,38 @@ def main_app():
             help="Upload one or more documents in supported formats."
         )
 
-        rules_text = st.text_area(
-            "Compliance Rules", 
-            height=300, 
-            placeholder="Enter each compliance rule on a new line or as a consolidated text block.",
-            help="Define the compliance rules to check against the documents."
+        st.subheader("Compliance Rules")
+
+        # Display existing rules with edit and delete options
+        for i, rule_item in enumerate(st.session_state.rules_list_data):
+            col1, col2 = st.columns([0.85, 0.15]) # Column for text input and delete button
+            with col1:
+                # Use a unique key for each text_input to allow editing
+                # The edited value will be directly updated in session_state.rules_list_data[i]['text']
+                # by Streamlit if we structure the key correctly or use on_change.
+                # For simplicity, we'll allow direct editing and rely on Streamlit's reruns.
+                # A more robust way is to use an on_change callback for each text_input.
+                edited_text = st.text_input(
+                    label=f"Rule {i+1}", 
+                    value=rule_item["text"], 
+                    key=f"rule_edit_{rule_item['id']}",
+                    label_visibility="visible" # Show label like "Rule 1", "Rule 2"
+                )
+                # Update the rule text in session state if it has changed
+                if edited_text != rule_item["text"]:
+                    st.session_state.rules_list_data[i]["text"] = edited_text
+            with col2:
+                st.button("🗑️", key=f"delete_{rule_item['id']}", on_click=delete_rule_callback, args=(rule_item['id'],), help="Delete this rule")
+
+        # Input for adding a new rule
+        st.text_input(
+            "Enter new rule text:", 
+            key="input_new_rule_text_key", # This key is used in add_new_rule_callback
+            placeholder="Type your rule here and click 'Add Rule'"
         )
+        st.button("Add Rule", on_click=add_new_rule_callback, use_container_width=True)
+        
+        st.markdown("---") # Separator
 
         run_button = st.button("Run Compliance Check", type="primary", use_container_width=True)
 
@@ -68,44 +114,52 @@ def main_app():
     if run_button:
         if not uploaded_files:
             st.warning("Please upload at least one document.")
-        elif not rules_text.strip():
-            st.warning("Please enter compliance rules.")
+        elif not st.session_state.rules_list_data: # Check if the list of rules is empty
+            st.warning("Please add at least one compliance rule.")
         else:
             with st.spinner("Processing documents and checking compliance..."):
                 temp_docs_dir = None
                 try:
                     # 1. Create a temporary directory for uploaded files
                     temp_docs_dir = tempfile.mkdtemp()
-                    st.info(f"Temporary directory created: {temp_docs_dir}")
+                    # st.info(f"Temporary directory created: {temp_docs_dir}") # Can be verbose
 
                     # 2. Save uploaded files to the temporary directory
                     for uploaded_file in uploaded_files:
                         file_path = os.path.join(temp_docs_dir, uploaded_file.name)
                         with open(file_path, "wb") as f:
                             f.write(uploaded_file.getbuffer())
-                        st.write(f"Saved {uploaded_file.name} to temp dir.")
+                        # st.write(f"Saved {uploaded_file.name} to temp dir.") # Can be verbose
                     
-                    # 3. Get rules_text (already available as 'rules_text')
+                    # 3. Format rules for the backend from session_state.rules_list_data
+                    rules_for_backend_list = []
+                    for i, rule_item in enumerate(st.session_state.rules_list_data):
+                        # Ensure rule_item['text'] is up-to-date from its input field
+                        # The direct edit in the loop above should handle this for text_input
+                        # If using st.text_area per rule, would need explicit key access
+                        rule_text_from_state = rule_item.get('text', '').strip()
+                        if rule_text_from_state: # Only add non-empty rules
+                           rules_for_backend_list.append(f"{i+1}. {rule_text_from_state}")
+                    rules_for_backend = "\n".join(rules_for_backend_list)
                     
-                    # 4. Call the main processing logic
+                    # DEBUG: Print rules being sent to backend
+                    # print(f"DEBUG: Rules sent to backend:\n{rules_for_backend}")
+                    # st.subheader("DEBUG: Formatted Rules for Backend")
+                    # st.text(rules_for_backend if rules_for_backend else "No rules formatted.")
+
                     st.info("Invoking backend processing workflow...")
-                    # Run the async function using asyncio.run()
-                    # This might need nest_asyncio if Streamlit itself uses an event loop
-                    # For now, let's try the direct approach.
                     try:
-                        # Ensure a new event loop for this asyncio.run call if needed
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-                        results = loop.run_until_complete(run_document_processing_func(temp_docs_dir, rules_text.strip()))
+                        results = loop.run_until_complete(run_document_processing_func(temp_docs_dir, rules_for_backend))
                     except RuntimeError as e:
                         if "cannot be called from a running event loop" in str(e):
                             st.warning("Asyncio runtime error. Trying with nest_asyncio. Please install it if not present (`pip install nest_asyncio`) and rerun.")
                             import nest_asyncio
                             nest_asyncio.apply()
-                            # Rerun with the applied patch
-                            loop = asyncio.new_event_loop()
+                            loop = asyncio.new_event_loop() # Get a new loop after applying nest_asyncio
                             asyncio.set_event_loop(loop)
-                            results = loop.run_until_complete(run_document_processing_func(temp_docs_dir, rules_text.strip()))
+                            results = loop.run_until_complete(run_document_processing_func(temp_docs_dir, rules_for_backend))
                         else:
                             raise e # Re-raise other runtime errors
 
@@ -138,14 +192,11 @@ def main_app():
                     import traceback
                     st.text(traceback.format_exc())
                 finally:
-                    # 6. Clean up the temporary directory
                     if temp_docs_dir and os.path.exists(temp_docs_dir):
                         shutil.rmtree(temp_docs_dir)
-                        st.info(f"Temporary directory {temp_docs_dir} cleaned up.")
+                        # st.info(f"Temporary directory {temp_docs_dir} cleaned up.") # Can be verbose
     else:
         st.info("Upload documents and enter rules, then click 'Run Compliance Check' to start.")
 
 if __name__ == "__main__":
-    # Ensure main.py's asyncio parts don't conflict if it's also run directly
-    # For Streamlit, it's better to run with `streamlit run streamlit_app.py`
     main_app()
