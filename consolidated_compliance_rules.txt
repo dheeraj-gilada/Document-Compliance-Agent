@@ -1,0 +1,22 @@
+# General Document Rules
+1. Each document must have a clearly identifiable document type (e.g., invoice, purchase_order, goods_receipt_note).
+2. All monetary amounts must be positive.
+
+# Invoice Specific Rules (Agent will determine these apply to Invoices)
+3. Invoice Number must be present and unique within the batch if multiple invoices are present.
+4. Invoice Date must be present and valid.
+5. Total amount on an Invoice must be greater than 0.
+6. All line items on an Invoice must have a positive quantity and unit_price.
+7. The Invoice must contain a clear delivery address.
+8. If a PO Number is present on an Invoice, it should only contain alphabets.
+
+# Purchase Order Specific Rules (Agent will determine these apply to POs)
+9. Purchase Order Number must be present.
+10. Purchase Order Date must be present.
+
+# Rules that may involve multiple documents (Agent will determine scope)
+11. If an Invoice and a Purchase Order are present for what appears to be the same transaction (e.g., based on shared identifiers like PO number, or very similar amounts/dates if no direct link), the Invoice total_amount_including_vat should match the Purchase Order total_amount.
+12. If an Invoice and a Purchase Order are present for the same transaction, the Invoice date should be on or after the Purchase Order date.
+13. If a Goods Receipt Note and an Invoice are present for the same transaction, all line items (by description and quantity) on the Goods Receipt Note should be present on the Invoice.
+14. If a Purchase Order is present, its po_number should be referenced in the corresponding Invoice if one exists in the batch.
+15. The currency should be consistent across all related financial documents (e.g., Invoice, PO) if they are part of the same transaction.

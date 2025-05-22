@@ -1,31 +1,33 @@
 # src/workflows/document_processing_workflow.py
 import os
 import logging
-from typing import List, Dict, TypedDict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from langgraph.graph import StateGraph, END
 
-from src.utils.document_loader import DocumentLoader
-from src.utils.extractor import DocumentExtractor
-from src.agents.compliance_checker_agent import ComplianceCheckerAgent
+from src.utils.document_loader import DocumentLoader # Assuming this handles loading from paths
+from src.utils.extractor import DocumentExtractor # For text extraction
+from src.agents.document_classifier_agent import DocumentTypeClassifierAgent # Corrected import
+from src.agents.structured_data_extractor_agent import StructuredDataExtractorAgent
+from src.agents.universal_compliance_agent import UniversalComplianceAgent # New Universal Agent
 
 logger = logging.getLogger(__name__)
 
 # --- State Definition (Revised) ---
-class DocumentProcessingState(TypedDict):
+class DocumentProcessingState(dict):
     docs_dir: str
-    initial_document_paths: List[str]  # All paths found initially
-    document_queue: List[str]          # Paths remaining to be processed
+    consolidated_rules_content: Optional[str] # Renamed from cross_document_rules_content, holds all rules
+    initial_document_paths: List[str]
+    document_queue: List[str]
     current_document_path: Optional[str]
-    loaded_document_data: Optional[Dict[str, Any]]
-    # extracted_data_single_doc is ephemeral, its result is added to processed_documents
-    processed_documents: List[Dict[str, Any]] # Accumulator for all outcomes
+    loaded_document_data: Optional[Dict[str, Any]] # Holds content and metadata for current doc
+    processed_documents: List[Dict[str, Any]] # Accumulator for all outcomes (classification, extraction)
     error_messages: List[str]
-    compliance_instructions: Optional[str]  # Added for compliance phase
+    all_compliance_findings: List[Dict[str, Any]] # Renamed from cross_document_findings, holds all findings from Universal Agent
 
 # --- Node Functions (Revised) ---
 
-async def list_document_files_node(state: DocumentProcessingState) -> Dict[str, Any]:
+async def list_files_node(state: DocumentProcessingState) -> Dict[str, Any]:
     """Lists all supported document files and initializes the processing queue."""
     docs_dir = state["docs_dir"]
     loader = DocumentLoader(docs_dir)
@@ -33,11 +35,16 @@ async def list_document_files_node(state: DocumentProcessingState) -> Dict[str, 
         document_filenames = loader.list_documents()
         initial_paths = [os.path.join(docs_dir, fname) for fname in document_filenames]
         logger.info(f"[Workflow] Found {len(initial_paths)} documents in {docs_dir}.")
+        # No individual compliance instructions needed in state anymore
+        # state['compliance_instructions'] = state.get('compliance_instructions')
+        state['consolidated_rules_content'] = state.get('consolidated_rules_content')
+        state['all_compliance_findings'] = [] # Initialize
         return {
             "initial_document_paths": initial_paths,
-            "document_queue": list(initial_paths), # Create a mutable copy for the queue
+            "document_queue": initial_paths.copy(), # Initialize the queue
             "processed_documents": [],
-            "error_messages": []
+            "error_messages": [],
+            "all_compliance_findings": [] # Ensure it's initialized
         }
     except Exception as e:
         logger.error(f"[Workflow] Error listing documents in {docs_dir}: {e}", exc_info=True)
@@ -45,7 +52,8 @@ async def list_document_files_node(state: DocumentProcessingState) -> Dict[str, 
             "initial_document_paths": [],
             "document_queue": [],
             "processed_documents": [],
-            "error_messages": [f"Failed to list documents: {str(e)}"]
+            "error_messages": [f"Failed to list documents: {str(e)}"],
+            "all_compliance_findings": [] # Ensure it's initialized
         }
 
 async def get_next_document_node(state: DocumentProcessingState) -> Dict[str, Any]:
@@ -54,311 +62,305 @@ async def get_next_document_node(state: DocumentProcessingState) -> Dict[str, An
     if doc_queue:
         next_doc_path = doc_queue.pop(0)
         logger.info(f"[Workflow] Next document to process: {next_doc_path}")
-        return {
-            "current_document_path": next_doc_path,
-            "document_queue": doc_queue,
-            "loaded_document_data": None # Reset for the new document
-        }
+        return {"current_document_path": next_doc_path, "document_queue": doc_queue}
     else:
         logger.info("[Workflow] Document queue empty. No more documents to process.")
         return {"current_document_path": None, "document_queue": []}
 
-async def load_and_classify_document_node(state: DocumentProcessingState) -> Dict[str, Any]:
-    """Loads and classifies the current document. Updates processed_documents on loading failure."""
-    current_document_path = state["current_document_path"]
-    if not current_document_path:
-        # This case should ideally not be reached if get_next_document_node works correctly
-        return {"error_messages": state.get("error_messages", []) + ["No current document path to load."]}
+async def load_classify_document_node(state: DocumentProcessingState) -> Dict[str, Any]:
+    """Loads and classifies the current document using DocumentLoader. Updates processed_documents."""
+    current_doc_path = state.get("current_document_path")
+    if not current_doc_path:
+        logger.error("[Workflow] No current document path found for loading.")
+        return {"error_messages": state["error_messages"] + ["No current document path for loading."]}
 
-    docs_dir = os.path.dirname(current_document_path)
-    filename = os.path.basename(current_document_path)
-    loader = DocumentLoader(docs_dir)
+    doc_filename = os.path.basename(current_doc_path)
+    docs_dir = os.path.dirname(current_doc_path)
     
-    try:
-        logger.info(f"[Workflow] Loading and classifying: {filename}")
-        document_data = await loader.load_document(filename)
-        logger.info(f"[Workflow] Loaded document: {filename}, type: {document_data.get('doc_type')}")
-        return {"loaded_document_data": document_data} # Success, no update to processed_documents yet
-    except Exception as e:
-        logger.error(f"[Workflow] Error loading/classifying {filename}: {e}", exc_info=True)
-        error_entry = {
-            'filename': filename,
-            'status': 'error_loading',
-            'error': str(e)
-        }
-        updated_processed_documents = state.get("processed_documents", []) + [error_entry]
-        return {
-            "loaded_document_data": None, 
-            "processed_documents": updated_processed_documents,
-            "error_messages": state.get("error_messages", []) + [f"Failed to load/classify {filename}: {str(e)}"]
-        }
+    logger.info(f"[Workflow] Attempting to load and classify: {doc_filename} from {docs_dir}")
+    loader = DocumentLoader(docs_dir) 
 
-async def record_skipped_extraction_node(state: DocumentProcessingState) -> Dict[str, Any]:
-    """Records that extraction was skipped for the current document (e.g., no text content)."""
-    current_document_path = state["current_document_path"]
-    loaded_data = state.get("loaded_document_data", {})
-    filename = os.path.basename(current_document_path if current_document_path else "unknown_file")
-    doc_type = loaded_data.get('doc_type', 'unknown_type_skipped_extraction')
-
-    logger.warning(f"[Workflow] Skipping extraction for {filename} (type: {doc_type}) due to missing text content or other load issue not causing an exception.")
-    
-    skipped_entry = {
-        'filename': filename,
-        'doc_type': doc_type,
-        'extracted_data': {},
-        'status': 'skipped_extraction_no_content'
+    doc_data_for_state = {
+        "filename": doc_filename,
+        "path": current_doc_path,
+        "status": "initialization",
+        "doc_type": None,
+        "extracted_text_content": None,
+        "extracted_tables_html": [], # Added for tables
+        "extracted_data": None, # To be filled by the next node
+        "error_message": None
     }
-    updated_processed_documents = state.get("processed_documents", []) + [skipped_entry]
-    return {"processed_documents": updated_processed_documents}
+
+    try:
+        # DocumentLoader.load_document handles loading, text extraction, table extraction, and classification
+        loaded_info = await loader.load_document(doc_filename) 
+
+        if not loaded_info or not loaded_info.get("text"):
+            # Check if 'text' is None or empty, or if loaded_info itself is problematic
+            logger.error(f"[Workflow] Failed to load or extract text from document: {doc_filename}. Skipping.")
+            doc_data_for_state["status"] = "error_loading_document"
+            doc_data_for_state["error_message"] = loaded_info.get("error_message", "Failed to load document content or extract text.")
+        else:
+            doc_data_for_state["doc_type"] = loaded_info.get("doc_type", "unknown")
+            doc_data_for_state["extracted_text_content"] = loaded_info.get("text")
+            doc_data_for_state["extracted_tables_html"] = loaded_info.get("tables_html", [])
+            doc_data_for_state["status"] = "classified" # Document is loaded, text/tables extracted, and classified
+            logger.info(f"[Workflow] Document {doc_filename} processed by DocumentLoader. Type: {doc_data_for_state['doc_type']}. Text length: {len(doc_data_for_state['extracted_text_content'] or '')}")
+
+    except FileNotFoundError as e:
+        logger.error(f"[Workflow] File not found for {doc_filename}: {e}", exc_info=True)
+        doc_data_for_state["status"] = "error_file_not_found"
+        doc_data_for_state["error_message"] = str(e)
+    except Exception as e:
+        logger.error(f"[Workflow] Error during load/classification of {doc_filename} by DocumentLoader: {e}", exc_info=True)
+        doc_data_for_state["status"] = "error_load_classify"
+        doc_data_for_state["error_message"] = str(e)
+    
+    processed_docs_list = list(state.get("processed_documents", []))
+    processed_docs_list.append(doc_data_for_state)
+    
+    # Update error messages in state if any error occurred for this document
+    current_errors = list(state.get("error_messages", []))
+    if doc_data_for_state["error_message"]:
+        current_errors.append(f"{doc_data_for_state['status']} for {doc_filename}: {doc_data_for_state['error_message']}")
+
+    return {"processed_documents": processed_docs_list, "error_messages": current_errors}
 
 async def extract_document_data_node(state: DocumentProcessingState) -> Dict[str, Any]:
     """Extracts data and updates processed_documents with the result (success or error)."""
-    loaded_document_data = state.get("loaded_document_data") # Use .get for safety
-    current_document_path = state.get("current_document_path", "unknown_file_at_extraction")
-    filename = os.path.basename(current_document_path)
+    current_doc_path = state.get("current_document_path")
+    processed_docs_list = list(state.get("processed_documents", []))
+    current_errors = list(state.get("error_messages", []))
 
-    # Safety check: ensure loaded_document_data exists and has either 'text' or 'tables_html'
-    if not loaded_document_data or (not loaded_document_data.get('text') and not loaded_document_data.get('tables_html')):
-        logger.error(f"[Workflow] extract_document_data_node called for {filename} but loaded_document_data is missing or lacks 'text' and 'tables_html'. This indicates a logic error in graph routing.")
-        error_entry = {
-            'filename': filename,
-            'doc_type': loaded_document_data.get('doc_type', 'error_in_routing_to_extraction') if loaded_document_data else 'unknown',
-            'extracted_data': {},
-            'status': 'error_logic_extraction_called_improperly',
-            'error': 'Extraction called without valid content (text or tables_html)'
-        }
-        updated_processed_documents = state.get("processed_documents", []) + [error_entry]
-        return {"processed_documents": updated_processed_documents}
+    if not current_doc_path:
+        logger.error("[Workflow] No current document path in extract_document_data_node.")
+        return {"error_messages": current_errors + ["Internal error: No current_doc_path in extract_data_node"]}
 
-    extractor = DocumentExtractor()
-    try:
-        logger.info(f"[Workflow] Extracting data from: {filename}")
-        # extractor.extract_data is expected to return the full document structure including filename, type, and extracted_data
-        # It should be able to handle loaded_document_data that might have only text, only tables, or both.
-        extracted_full_data = await extractor.extract_data(loaded_document_data) 
-        logger.info(f"[Workflow] Extracted data for {filename}. Keys: {list(extracted_full_data.get('extracted_data', {}).keys()) if extracted_full_data and extracted_full_data.get('extracted_data') else 'None'}")
-        
-        # Ensure the status from extractor is preserved, or set a default if not present
-        if 'status' not in extracted_full_data:
-            extracted_full_data['status'] = 'success_extraction'
-            
-        updated_processed_documents = state.get("processed_documents", []) + [extracted_full_data]
-        return {"processed_documents": updated_processed_documents}
-    except Exception as e:
-        logger.error(f"[Workflow] Error extracting data from {filename}: {e}", exc_info=True)
-        error_entry = {
-            'filename': filename,
-            'doc_type': loaded_document_data.get('doc_type', 'unknown_extraction_error'),
-            'extracted_data': {},
-            'status': 'error_extracting',
-            'error': str(e)
-        }
-        updated_processed_documents = state.get("processed_documents", []) + [error_entry]
-        return {
-            "processed_documents": updated_processed_documents,
-            "error_messages": state.get("error_messages", []) + [f"Failed to extract data from {filename}: {str(e)}"]
-        }
+    filename = os.path.basename(current_doc_path)
+    
+    doc_entry_to_update = None
+    entry_index_in_list = -1 # Initialize with a value indicating not found
 
-# --- New Node for Compliance Check ---
-async def compliance_check_node(state: DocumentProcessingState) -> Dict[str, Any]:
-    """Performs compliance check on the extracted data for the current document."""
-    current_document_path = state.get("current_document_path")
-    compliance_instructions = state.get("compliance_instructions")
-    processed_docs_list = list(state.get("processed_documents", [])) # Operate on a copy
-    filename = os.path.basename(current_document_path if current_document_path else "unknown_file_compliance")
-
-    if not current_document_path:
-        logger.error("[Workflow] Compliance check called without a current_document_path.")
-        return {"error_messages": state.get("error_messages", []) + ["Compliance check: No current document path."]}
-
-    if not compliance_instructions:
-        logger.info(f"[Workflow] No compliance instructions provided. Skipping compliance check for {filename}.")
-        # Find the document and ensure its status reflects skipped compliance if needed,
-        # though decide_after_extraction should prevent this node from being called.
-        return {} # No change to processed_documents if instructions are missing (should be caught by conditional edge)
-
-    # Find the successfully extracted data for the current document
-    doc_to_check = None
-    doc_idx = -1
-    for i, doc_entry in reversed(list(enumerate(processed_docs_list))):
-        if doc_entry.get('filename') == filename and doc_entry.get('status') == 'success_extraction':
-            doc_to_check = doc_entry
-            doc_idx = i
+    for entry_idx, entry in reversed(list(enumerate(processed_docs_list))):
+        if entry.get('filename') == filename:
+            doc_entry_to_update = entry
+            entry_index_in_list = entry_idx
             break
 
-    if not doc_to_check:
-        logger.error(f"[Workflow] Compliance check for {filename}: Successfully extracted data not found in processed_documents. This might be a logic error.")
-        # Update status for the latest entry of this file if it exists, or add a new error entry
-        found_existing_entry_for_update = False
-        for i, doc_entry in reversed(list(enumerate(processed_docs_list))):
-            if doc_entry.get('filename') == filename:
-                processed_docs_list[i]['status'] = 'error_compliance_data_not_found'
-                processed_docs_list[i]['compliance_details'] = {'compliance_status': 'error', 'findings': [{'rule_checked': 'N/A', 'status': 'error', 'details': 'Extracted data not found for compliance check.'}]}
-                found_existing_entry_for_update = True
-                break
-        if not found_existing_entry_for_update:
-             processed_docs_list.append({
-                'filename': filename,
-                'doc_type': 'unknown',
-                'status': 'error_compliance_data_not_found',
-                'compliance_details': {'compliance_status': 'error', 'findings': [{'rule_checked': 'N/A', 'status': 'error', 'details': 'Extracted data not found for compliance check.'}]}
-            })
-        return {"processed_documents": processed_docs_list, "error_messages": state.get("error_messages", []) + [f"Compliance check for {filename}: Extracted data not found."]}
+    if not doc_entry_to_update or doc_entry_to_update.get("status") in ["error_loading_document", "error_file_not_found", "error_load_classify"]:
+        logger.warning(f"[Workflow] Skipping data extraction for {filename} due to prior error ('{doc_entry_to_update.get('status') if doc_entry_to_update else 'No entry'}') or no entry.")
+        return {} # No change to state, error already recorded or document skipped.
 
-    agent = ComplianceCheckerAgent()
-    try:
-        logger.info(f"[Workflow] Performing compliance check for: {filename} (type: {doc_to_check.get('doc_type')})")
-        # The ComplianceCheckerAgent expects the 'extracted_data' field within the passed dictionary.
-        # doc_to_check already has this structure from DocumentExtractor
-        compliance_result = await agent.check_compliance(
-            extracted_data=doc_to_check, # Pass the whole doc_to_check which contains 'extracted_data' field
-            document_type=doc_to_check.get('doc_type', 'unknown'),
-            compliance_instructions=compliance_instructions
-        )
-        
-        # Update the document's entry in processed_documents
-        processed_docs_list[doc_idx]['compliance_details'] = compliance_result
-        # Determine overall status based on compliance_result
-        if compliance_result.get('compliance_status') == 'compliant':
-            processed_docs_list[doc_idx]['status'] = 'compliance_passed'
-        elif compliance_result.get('compliance_status') == 'non-compliant':
-            processed_docs_list[doc_idx]['status'] = 'compliance_failed'
-        elif compliance_result.get('compliance_status') == 'warning':
-            processed_docs_list[doc_idx]['status'] = 'compliance_warning'
-        else: # error or other status from agent
-            processed_docs_list[doc_idx]['status'] = f"compliance_{compliance_result.get('compliance_status', 'unknown_state')}"
-        
-        logger.info(f"[Workflow] Compliance check for {filename} completed. Status: {processed_docs_list[doc_idx]['status']}")
+    doc_type = doc_entry_to_update.get("doc_type", "unknown")
+    text_content = doc_entry_to_update.get("extracted_text_content", "")
+    tables_html_list = doc_entry_to_update.get("extracted_tables_html", [])
+    combined_tables_html = "\n\n".join(tables_html_list) # Combine list of HTML tables into a single string
+
+    if not text_content and not combined_tables_html:
+        logger.warning(f"[Workflow] No text content or tables for {filename} (type: {doc_type}). Skipping structured data extraction.")
+        doc_entry_to_update["status"] = "skipped_extraction_no_content"
+        if entry_index_in_list != -1: # Ensure entry was found before trying to update
+            processed_docs_list[entry_index_in_list] = doc_entry_to_update
         return {"processed_documents": processed_docs_list}
 
+    data_extractor_agent = StructuredDataExtractorAgent()
+    try:
+        logger.info(f"[Workflow] Extracting structured data from: {filename} (type: {doc_type})")
+        extracted_data = await data_extractor_agent.extract_structured_data(
+            doc_type=doc_type, 
+            text_content=text_content, 
+            combined_tables_html=combined_tables_html, 
+            filename=filename
+        )
+        doc_entry_to_update["extracted_data"] = extracted_data
+        doc_entry_to_update["status"] = "data_extracted"
+        logger.info(f"[Workflow] Structured data extracted for {filename}.")
+        if entry_index_in_list != -1:
+            processed_docs_list[entry_index_in_list] = doc_entry_to_update
+        return {"processed_documents": processed_docs_list}
     except Exception as e:
-        logger.error(f"[Workflow] Error during compliance check for {filename}: {e}", exc_info=True)
-        processed_docs_list[doc_idx]['compliance_details'] = {
-            'compliance_status': 'error_agent_call',
-            'findings': [{'rule_checked': 'Agent Execution', 'status': 'error', 'details': str(e)}]
-        }
-        processed_docs_list[doc_idx]['status'] = 'error_compliance_check'
+        logger.error(f"[Workflow] Error extracting structured data from {filename}: {e}", exc_info=True)
+        doc_entry_to_update["status"] = "error_extraction"
+        doc_entry_to_update["error_message"] = str(e)
+        if entry_index_in_list != -1:
+            processed_docs_list[entry_index_in_list] = doc_entry_to_update
+            current_errors.append(f"Data extraction error for {filename}: {str(e)}") # Add specific error
+        return {"processed_documents": processed_docs_list, "error_messages": current_errors}
+
+# Renamed and Revised Node for Universal Compliance Check
+async def universal_compliance_check_node(state: DocumentProcessingState) -> Dict[str, Any]:
+    """Performs universal compliance check on the extracted data from all processed documents."""
+    processed_docs_input_list = state.get("processed_documents", [])
+    consolidated_rules = state.get("consolidated_rules_content")
+    current_errors = state.get("error_messages", [])
+
+    if not consolidated_rules:
+        logger.info("[Workflow] No consolidated compliance rules provided. Skipping universal compliance check.")
         return {
-            "processed_documents": processed_docs_list,
-            "error_messages": state.get("error_messages", []) + [f"Compliance check failed for {filename}: {str(e)}"]
+            "all_compliance_findings": [],
+            "processed_documents": processed_docs_input_list, # Pass through
+            "error_messages": current_errors # Pass through
         }
+
+    # Prepare data for the agent: List of {'filename': str, 'doc_type': str, 'extracted_data': Dict}
+    # Only include documents that have relevant data for compliance.
+    input_for_universal_agent = []
+    for doc_data in processed_docs_input_list:
+        if (doc_data.get("status") in ["data_extracted", "classified"] and # Include if data extracted or at least classified
+            doc_data.get("filename") and 
+            doc_data.get("doc_type") and 
+            doc_data.get("extracted_data") is not None): # Ensure extracted_data is present
+            input_for_universal_agent.append({
+                "filename": doc_data["filename"],
+                "doc_type": doc_data["doc_type"],
+                "extracted_data": doc_data["extracted_data"]
+            })
+        elif (doc_data.get("status") == "classified" and doc_data.get("extracted_data") is None):
+             input_for_universal_agent.append({
+                "filename": doc_data["filename"],
+                "doc_type": doc_data["doc_type"],
+                "extracted_data": {} # Pass empty dict if classified but no data extracted (e.g. non-text doc)
+            })
+        else:
+            logger.debug(f"[Workflow] Document {doc_data.get('filename', 'Unknown')} with status {doc_data.get('status', 'N/A')} will not be included in universal compliance check due to missing critical data.")
+
+    if not input_for_universal_agent and processed_docs_input_list: # If there were docs but none suitable
+        logger.warning("[Workflow] No suitable documents found for universal compliance check after filtering, though documents were processed.")
+        # Still call agent, it might have rules that are 'not_applicable' universally
+    elif not processed_docs_input_list:
+        logger.info("[Workflow] No documents were processed at all. Universal compliance check will reflect this.")
+        # Agent will be called with empty list, should handle it.
+
+    agent = UniversalComplianceAgent()
+    try:
+        logger.info(f"[Workflow] Performing universal compliance checks for {len(input_for_universal_agent)} documents against consolidated rules.")
+        all_findings = await agent.check_all_compliance(
+            input_for_universal_agent,
+            consolidated_rules
+        )
+        logger.info(f"[Workflow] Universal compliance check completed. {len(all_findings)} findings generated.")
+        return {
+            "all_compliance_findings": all_findings,
+            "processed_documents": processed_docs_input_list, # Pass through existing
+            "error_messages": current_errors # Pass through existing
+        }
+    except Exception as e:
+        logger.error(f"[Workflow] Error during universal compliance check: {e}", exc_info=True)
+        error_finding = {
+            "rule_id": "N/A",
+            "rule_checked": "Universal Compliance Agent Invocation Error", 
+            "status": "error", 
+            "details": f"Universal compliance agent failed: {str(e)}",
+            "involved_documents": [d['filename'] for d in input_for_universal_agent if 'filename' in d]
+        }
+        return {
+            "all_compliance_findings": [error_finding],
+            "processed_documents": processed_docs_input_list, # Pass through existing
+            "error_messages": current_errors + [f"Universal compliance check failed: {str(e)}"]
+        }
+
 
 # --- Graph Assembly (Revised) ---
-
 def create_document_processing_graph():
-    """Creates and returns the LangGraph for document processing."""
+    """Creates and returns the LangGraph for document processing with universal compliance."""
     workflow = StateGraph(DocumentProcessingState)
 
-    # Add nodes
-    workflow.add_node("list_files", list_document_files_node)
+    # Define nodes
+    workflow.add_node("list_files", list_files_node)
     workflow.add_node("get_next_document", get_next_document_node)
-    workflow.add_node("load_classify_doc", load_and_classify_document_node)
-    workflow.add_node("record_skipped_extraction", record_skipped_extraction_node)
+    workflow.add_node("load_classify_doc", load_classify_document_node)
     workflow.add_node("extract_data", extract_document_data_node)
-    workflow.add_node("compliance_check", compliance_check_node) # New node
+    workflow.add_node("universal_compliance_check", universal_compliance_check_node) # Renamed node
 
     # Define entry and connections
     workflow.set_entry_point("list_files")
     workflow.add_edge("list_files", "get_next_document")
-    
+
+    # Conditional edge after get_next_document
+    def should_continue_processing(state: DocumentProcessingState) -> str:
+        if state.get("current_document_path"): # If get_next_document provided a path
+            return "process_current_document"
+        else: # No more documents in queue
+            return "finalize_processing"
+
     workflow.add_conditional_edges(
         "get_next_document",
-        lambda state: "load_classify_doc" if state.get("current_document_path") else END,
+        should_continue_processing,
         {
-            "load_classify_doc": "load_classify_doc",
-            END: END
+            "process_current_document": "load_classify_doc",
+            "finalize_processing": "universal_compliance_check" # If no more docs, proceed to universal compliance
         }
     )
 
-    def decide_after_load(state: DocumentProcessingState) -> str:
-        loaded_data = state.get("loaded_document_data")
-        current_path = state.get('current_document_path')
-        if not loaded_data:
-            logger.info(f"[Workflow] Loading failed for {current_path}, proceeding to next document.")
-            return "get_next_document"
-        elif not loaded_data.get("text") and not loaded_data.get("tables_html"):
-            logger.info(f"[Workflow] No text or tables_html for {current_path}, recording skipped extraction.")
-            return "record_skipped_extraction"
+    # After loading and classifying, decide if data extraction is possible/needed
+    def should_extract_data(state: DocumentProcessingState) -> str:
+        current_doc_path = state.get("current_document_path")
+        if not current_doc_path: return "skip_extraction_to_next" # Should not happen here
+        
+        filename = os.path.basename(current_doc_path)
+        latest_entry_for_doc = None
+        for entry in reversed(state.get("processed_documents", [])):
+            if entry.get('filename') == filename:
+                latest_entry_for_doc = entry
+                break
+        
+        if latest_entry_for_doc and latest_entry_for_doc.get("status") not in ["error_loading_document", "error_load_classify"] and latest_entry_for_doc.get("extracted_text_content"):
+            return "proceed_to_extraction"
         else:
-            logger.info(f"[Workflow] Content (text or tables_html) found for {current_path}, proceeding to extraction.")
-            return "extract_data"
+            logger.info(f"[Workflow] Skipping data extraction for {filename} due to prior error or no text content.")
+            return "skip_extraction_to_next" # Go to next document processing cycle
 
     workflow.add_conditional_edges(
         "load_classify_doc",
-        decide_after_load,
+        should_extract_data,
         {
-            "get_next_document": "get_next_document",
-            "record_skipped_extraction": "record_skipped_extraction",
-            "extract_data": "extract_data"
+            "proceed_to_extraction": "extract_data",
+            "skip_extraction_to_next": "get_next_document"
         }
     )
     
-    workflow.add_edge("record_skipped_extraction", "get_next_document")
+    # After data extraction, always go to get_next_document to loop or finish
+    workflow.add_edge("extract_data", "get_next_document")
 
-    # New conditional logic after extraction
-    def decide_after_extraction(state: DocumentProcessingState) -> str:
-        current_document_path = state.get("current_document_path")
-        filename = os.path.basename(current_document_path if current_document_path else "unknown_file")
-        
-        if not state.get("compliance_instructions"):
-            logger.info(f"[Workflow] No compliance instructions. Skipping compliance check for {filename}.")
-            return "get_next_document"
+    # After universal compliance check, the workflow ends.
+    workflow.add_edge("universal_compliance_check", END)
 
-        # Check status of the current document in processed_documents
-        # Find the latest entry for the current document
-        latest_entry_for_doc = None
-        for doc_entry in reversed(state.get("processed_documents", [])):
-            if doc_entry.get('filename') == filename:
-                latest_entry_for_doc = doc_entry
-                break
-        
-        if latest_entry_for_doc and latest_entry_for_doc.get('status') == 'success_extraction':
-            logger.info(f"[Workflow] Extracted data found for {filename}. Proceeding to compliance check.")
-            return "compliance_check"
-        else:
-            status_found = latest_entry_for_doc.get('status') if latest_entry_for_doc else 'no_entry_found'
-            logger.info(f"[Workflow] Compliance check for {filename} skipped. Reason: No compliance instructions or extraction not successful (status: {status_found}).")
-            return "get_next_document"
-
-    workflow.add_conditional_edges(
-        "extract_data",
-        decide_after_extraction,
-        {
-            "compliance_check": "compliance_check",
-            "get_next_document": "get_next_document"
-        }
-    )
-
-    workflow.add_edge("compliance_check", "get_next_document")
-    
-    logger.info("[Workflow] Document processing graph compiled with compliance check stage.")
+    logger.info("[Workflow] Document processing graph compiled with universal compliance check stage.")
     return workflow
 
 # Example of how to run (for testing, typically called from main.py)
-async def run_workflow_example(docs_dir_path):
+async def example_run():
     app = create_document_processing_graph()
-    # Initial state needs to reflect the new DocumentProcessingState structure
     initial_state: DocumentProcessingState = {
-        "docs_dir": docs_dir_path,
-        "initial_document_paths": [],
-        "document_queue": [],
+        "docs_dir": "./docs", # Example directory
+        "initial_document_paths": [], 
+        "document_queue": [],      
         "current_document_path": None,
         "loaded_document_data": None,
         "processed_documents": [],
         "error_messages": [],
-        "compliance_instructions": "example_instructions" # Added for compliance phase
+        "consolidated_rules_content": "1. Test rule 1.\n2. Test rule 2 involving Document A and Document B.", # Example rules
+        "all_compliance_findings": []
     }
     final_state = await app.ainvoke(initial_state)
     
-    print("\n--- Workflow Final State ---")
-    for doc_summary in final_state.get('processed_documents', []):
-        print(f"  File: {doc_summary.get('filename')}, Type: {doc_summary.get('doc_type', 'N/A')}, Status: {doc_summary.get('status', 'processed')}")
-        if 'error' in doc_summary:
-            print(f"    Error: {doc_summary['error']}")
-        if 'compliance_details' in doc_summary:
-            print(f"    Compliance Status: {doc_summary['compliance_details'].get('compliance_status', 'N/A')}")
-            for finding in doc_summary['compliance_details'].get('findings', []):
-                print(f"      Rule: {finding.get('rule_checked', 'N/A')}, Status: {finding.get('status', 'N/A')}, Details: {finding.get('details', 'N/A')}")
+    print("\n--- Final Workflow State ---")
+    # Avoid printing very large data directly like extracted_text_content
+    for key, value in final_state.items():
+        if key == 'processed_documents':
+            print(f"\n{key}:")
+            for doc_summary in value:
+                summary_copy = doc_summary.copy()
+                summary_copy.pop('extracted_text_content', None) # Remove large field for printing
+                summary_copy.pop('raw_content', None) # Remove large field for printing
+                print(f"  - {summary_copy}")
+        elif key == 'all_compliance_findings':
+            print(f"\n{key}:")
+            for finding in value:
+                print(f"  - {finding}")
+        else:
+            print(f"{key}: {value}")
+
     if final_state.get('error_messages'):
         print("\nOverall Errors during workflow:")
         for err in final_state['error_messages']:
@@ -366,12 +368,5 @@ async def run_workflow_example(docs_dir_path):
     return final_state
 
 if __name__ == '__main__':
-    import asyncio
-    import json 
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    test_docs_dir = os.path.join(project_root, "docs")
-    
-    asyncio.run(run_workflow_example(test_docs_dir))
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(example_run())
