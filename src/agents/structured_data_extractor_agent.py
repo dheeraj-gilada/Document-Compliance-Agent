@@ -51,7 +51,7 @@ class StructuredDataExtractorAgent:
 4.  **JSON Output Structure:**
     *   The JSON structure should be intuitive and based on the document's content and type.
     *   For specific document types like '{doc_type}', group related information under a main key (e.g., for an 'invoice', use a top-level key like `"invoice": {{{{...all invoice details...}}}}`).
-    *   **Key Standardization for Invoices:** When `doc_type` is 'invoice', ensure the primary invoice identifier is stored under the key `invoice_id`. The purchase order number should be under `purchase_order_number`. Other common fields should also use consistent, snake_case keys (e.g., `customer_name`, `vendor_name`, `due_date`, `total_amount`).
+    *   Use clear, descriptive, snake_case keys for extracted fields. For instance, an invoice's main identifier might be named `invoice_id` or `invoice_number` in the JSON, aiming to reflect the document's terminology while ensuring valid and consistent key formats. Similarly for other fields like `purchase_order_number`.
     *   If the document type is 'unknown' or 'other', be more general in your extraction, focusing on clear headings, sections, and data points.
 5.  **Output Requirements:**
     *   Always return a single, valid JSON object.
