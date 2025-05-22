@@ -1,0 +1,131 @@
+{
+  "Truck Consignment Delivery Note.pdf": {
+    "filename": "Truck Consignment Delivery Note.pdf",
+    "doc_type": "goods_receipt_note",
+    "extracted_data": {
+      "document_type": "goods_receipt_note",
+      "export_details": {
+        "date_of_export": "2023-08-14",
+        "invoice_date": "2023-08-11",
+        "invoice_number": "LACO-39",
+        "currency": "AED"
+      },
+      "shipper": {
+        "name": "Leminar Air Conditioning Co LLC",
+        "address": "Dubai P.O. Box 33539",
+        "contact": {
+          "telephone": "+971 4 333 8700",
+          "showrooms": [
+            "+971 4 223 6910",
+            "+971 4 250 4423"
+          ]
+        }
+      },
+      "consignee": {
+        "country": "India"
+      },
+      "goods": [
+        {
+          "description": "Rubber Support",
+          "hs_code": "40169990",
+          "unit_value": 156.56,
+          "total_value": 16249.26,
+          "weight": 552.0
+        },
+        {
+          "description": "Spring Hanger",
+          "hs_code": "40169990",
+          "unit_value": 22.05,
+          "total_value": 6107.18,
+          "weight": 77.0
+        },
+        {
+          "description": "FJFF 65, FJFF 300, FJFF 75",
+          "hs_code": "40169990",
+          "unit_value": 156.56,
+          "total_value": 16438.44,
+          "weight": 470.0
+        },
+        {
+          "description": "Hattersley Valves",
+          "hs_code": "84818090",
+          "unit_value": 204.91,
+          "total_value": 5532.64,
+          "weight": 198.0
+        },
+        {
+          "description": "Clamp and Accessories",
+          "hs_code": "82057000",
+          "unit_value": 2.7,
+          "total_value": 7695.34,
+          "weight": 225.0
+        }
+      ],
+      "total": {
+        "weight": 1522,
+        "total_value": 52022.86,
+        "total_value_in_words": "Fifty Two Thousand Twenty Two & 86/100 Dirhams Only"
+      },
+      "customs_details": {
+        "exporter": "Leminar Air Conditioning Co LLC",
+        "customs_declaration": {
+          "date": "2023-08-15",
+          "declaration_number": "203-04144376-23"
+        },
+        "destination": "Oman"
+      }
+    }
+  },
+  "AI Engineer Challenge Invoice.PDF": {
+    "filename": "AI Engineer Challenge Invoice.PDF",
+    "doc_type": "invoice",
+    "extracted_data": {
+      "invoice": {
+        "tax_registration_number": "100060237300003",
+        "customer_number": "128659",
+        "invoice_number": "626867-ADS1-1",
+        "customer_name": "LEMINAR AIR CONDITIONING CO. LLC",
+        "invoice_date": "2023-08-12",
+        "sales_order_number": "SO-153412",
+        "bill_to_address": {
+          "p_o_box": "946",
+          "city": "Ruwi",
+          "country": "Oman"
+        },
+        "due_date": "2023-12-10",
+        "purchase_order_number": "1002475",
+        "sales_man": "BHAVYA RAKESH",
+        "delivery_note_number": "626867-ADS1-1",
+        "currency": "AED",
+        "exchange_rate": 1,
+        "project_name": "INTERCOMPANY",
+        "line_items": [
+          {
+            "item_code": "WEICCO Rubber Support Insert 25mm",
+            "description": "35.00",
+            "quantity": 35,
+            "uom": "SET",
+            "unit_price": 4.82,
+            "total_amount_excluding_vat": 168.7,
+            "vat": 0.0,
+            "vat_number": "RSI",
+            "total_amount_including_vat": 168.7
+          }
+        ],
+        "total_amount_excluding_vat": 168.7,
+        "vat_amount": 0.0,
+        "total_amount_including_vat": 168.7,
+        "total_amount_in_words": "One Hundred Sixty Eight and 70/100 Only",
+        "payment_terms": "LPO - 120 Days",
+        "ship_to_address": {
+          "p_o_box": "946",
+          "city": "Ruwi",
+          "country": "Oman"
+        },
+        "receiver_name": "Ofelia",
+        "authorized_by": null,
+        "prepared_by": null
+      }
+    }
+  }
+}
