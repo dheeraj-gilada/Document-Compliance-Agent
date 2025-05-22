@@ -71,7 +71,25 @@ class ComplianceCheckerAgent:
                 model=self.model_name,
                 response_format={"type": "json_object"},
                 messages=[
-                    {"role": "system", "content": "You are a meticulous compliance checking assistant. Analyze the provided document data against the compliance rules and return your findings in JSON format. The JSON object must have two top-level keys: 'compliance_status' (string: 'compliant', 'non-compliant', or 'warning') and 'findings' (a list of objects, where each object has 'rule_checked' (string), 'status' (string: 'pass', 'fail', or 'warning'), and 'details' (string)). Ensure the entire response is a single valid JSON object."},
+                    {"role": "system", "content": """You are a meticulous compliance checking assistant. Your task is to analyze the provided 'Extracted Document Data' against the 'Compliance Instructions' and return your findings in a structured JSON format.
+
+The JSON object MUST have two top-level keys:
+1.  `compliance_status`: A string indicating the overall compliance. This can be 'compliant', 'non-compliant', 'error', or 'warning'.
+    *   'non-compliant' if any rule explicitly fails.
+    *   'error' if critical data is missing for multiple rules, preventing a proper assessment, or if the LLM encounters an internal error processing.
+    *   'warning' if some non-critical data is missing (leading to 'error' status for those specific findings) or minor issues are found that don't constitute a hard 'fail'.
+    *   'compliant' if all rules pass.
+2.  `findings`: A list of objects. Each object represents a check for a single rule and MUST contain:
+    *   `rule_checked`: (string) The exact compliance rule that was checked.
+    *   `status`: (string) The outcome of the check for this rule. Must be one of 'pass', 'fail', or 'error'.
+        *   'pass': The data complies with the rule.
+        *   'fail': The data explicitly violates the rule.
+        *   'error': The data required to check this rule is missing from the 'Extracted Document Data', OR the rule cannot be confidently evaluated due to ambiguity or insufficient information.
+    *   `details`: (string) A clear, concise explanation for the status, especially for 'fail' or 'error' statuses. If 'error' due to missing data, specify which data was missing.
+
+Interpret rules LITERALLY. Do not infer constraints not explicitly stated in the rule.
+If a specific field mentioned in a rule (e.g., 'Invoice ID', 'Vendor Name') is NOT present in the 'Extracted Document Data', the status for that rule check should be 'error', and the details should state that the required data was missing.
+Ensure the entire response is a single, valid JSON object."""},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1, # Lower temperature for more deterministic, factual output
@@ -147,8 +165,16 @@ class ComplianceCheckerAgent:
         prompt += "-------------------------------------\n"
         prompt += compliance_instructions
         prompt += "\n-------------------------------------\n\n"
-        prompt += "Based on the instructions, evaluate each rule. For each rule, indicate if its status is 'pass', 'fail', or 'warning'. Provide clear, concise details for your assessment. "
-        prompt += "Return your complete response as a single JSON object with two top-level keys: 'compliance_status' (string: 'compliant', 'non-compliant', or 'warning' based on overall assessment) and 'findings' (a list of objects, each detailing one rule check: 'rule_checked', 'status', and 'details')."
+        prompt += """Based on the instructions provided in the System Prompt:
+Carefully evaluate each rule from the 'Compliance Instructions' against the 'Extracted Document Data'.
+For each rule, determine if its status is 'pass', 'fail', or 'error'.
+- Use 'pass' if the data meets the rule.
+- Use 'fail' if the data explicitly violates the rule.
+- Use 'error' if the data needed to check the rule is missing from the 'Extracted Document Data', or if you cannot confidently assess the rule. Provide specific details for 'fail' or 'error' statuses, including what data was missing if applicable.
+
+Interpret rules LITERALLY. For example, if a rule says 'quantity must be positive', a value like 4.82 is compliant. Do not infer additional constraints like 'must be a whole number' unless the rule explicitly states it.
+
+Return your complete response as a single JSON object adhering to the structure defined in the System Prompt ('compliance_status' and 'findings')."""
         return prompt
 
 # Example Usage (for testing purposes)

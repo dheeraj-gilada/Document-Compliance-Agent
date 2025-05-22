@@ -9,7 +9,7 @@ import argparse
 import json
 import logging
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # Configure logging
 logging.basicConfig(
@@ -19,24 +19,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import utility modules
-from src.utils.config import REPORTS_DIR, DOCS_DIR
+from src.utils.config import DOCS_DIR
 from src.workflows.document_processing_workflow import create_document_processing_graph, DocumentProcessingState
 
-async def run_document_processing(docs_dir_to_process: str) -> List[Dict[str, Any]]:
+async def run_document_processing(docs_dir_to_process: str, compliance_instructions: Optional[str] = None) -> List[Dict[str, Any]]:
     """Invokes the document processing LangGraph workflow and returns processed documents."""
     logger.info(f"Starting document processing workflow for directory: {docs_dir_to_process}")
+    if compliance_instructions:
+        logger.info("Compliance instructions provided and will be used in the workflow.")
+    else:
+        logger.info("No compliance instructions provided; compliance checks will be skipped.")
     
-    # Create and compile the graph
-    app = create_document_processing_graph()
+    graph = create_document_processing_graph() # Get the StateGraph instance
+    app = graph.compile() # Compile the graph to get the runnable application
     
     initial_state: DocumentProcessingState = {
         "docs_dir": docs_dir_to_process,
-        "document_paths": [],
+        "compliance_instructions": compliance_instructions,
+        "initial_document_paths": [], 
+        "document_queue": [],      
         "current_document_path": None,
         "loaded_document_data": None,
-        "extracted_data_single_doc": None,
-        "processed_documents": [],
-        "error_messages": []
+        "processed_documents": [], 
+        "error_messages": []       
     }
     
     final_state = await app.ainvoke(initial_state)
@@ -49,7 +54,6 @@ async def run_document_processing(docs_dir_to_process: str) -> List[Dict[str, An
         for err in workflow_errors:
             logger.error(f"- {err}")
 
-    # Log summary of processed documents from the workflow perspective
     logger.info("Workflow processing summary:")
     for doc_summary in processed_docs_list:
         status = doc_summary.get('status', 'processed')
@@ -59,6 +63,10 @@ async def run_document_processing(docs_dir_to_process: str) -> List[Dict[str, An
         log_msg = f"  File: {filename}, Type: {doc_type}, Status: {status}"
         if error_info:
             log_msg += f", Error: {error_info}"
+        
+        compliance_details = doc_summary.get('compliance_details')
+        if compliance_details:
+            log_msg += f", Compliance: {compliance_details.get('compliance_status', 'N/A')}"
         logger.info(log_msg)
 
     return processed_docs_list
@@ -69,67 +77,57 @@ async def main():
                         help="Directory containing documents to process.")
     parser.add_argument("--output_file", type=str, 
                         default=os.path.join("extracted_data", "all_extracted_data.json"), 
-                        help="File to save all extracted data.")
-    parser.add_argument("--instructions", type=str, help="Natural language compliance instructions.")
+                        help="File to save all processed data, including extraction and compliance results.")
+    parser.add_argument("--instructions", type=str, help="Natural language compliance instructions (as a string).")
     parser.add_argument("--instructions-file", type=str, help="Path to a file containing compliance instructions.")
 
     args = parser.parse_args()
 
-    logger.info(f"Starting document loading and extraction from: {args.docs_dir}")
+    compliance_instructions_text: Optional[str] = args.instructions
+    if args.instructions_file:
+        try:
+            with open(args.instructions_file, 'r') as f_instr:
+                compliance_instructions_text = f_instr.read()
+            logger.info(f"Loaded compliance instructions from: {args.instructions_file}")
+        except FileNotFoundError:
+            logger.error(f"Instruction file not found: {args.instructions_file}. Proceeding without file-based instructions.")
+            if not compliance_instructions_text: 
+                 logger.warning("No compliance instructions will be used as file was not found and --instructions flag was empty.")
+        except Exception as e:
+            logger.error(f"Error reading instruction file {args.instructions_file}: {e}. Proceeding without file-based instructions.")
+            if not compliance_instructions_text:
+                 logger.warning("No compliance instructions will be used due to error in reading file and --instructions flag was empty.")
 
-    # Invoke the new workflow-based processing
-    processed_docs_data = await run_document_processing(args.docs_dir)
+    if not compliance_instructions_text:
+        logger.info("No compliance instructions provided (either via --instructions or --instructions-file). Compliance checks will be skipped.")
+    else:
+        logger.info("Compliance instructions are prepared.")
 
-    # Save all extracted data to a single JSON file
-    # The structure from the workflow's 'processed_documents' list should be suitable
-    # It's a list of dicts, where each dict is the full data for one document.
-    # We might want to transform it into the previous format (dict keyed by filename)
-    # For now, let's save the list directly.
-    
+    logger.info(f"Starting document processing from: {args.docs_dir}")
+
+    processed_docs_data = await run_document_processing(args.docs_dir, compliance_instructions_text)
+
     output_data_for_json = {}
-    successful_extractions = 0
+    successful_outcomes = 0
     for doc_data in processed_docs_data:
         filename = doc_data.get('filename')
-        if filename and doc_data.get('status') != 'error_loading' and doc_data.get('status') != 'error_extracting' and doc_data.get('extracted_data'):
-            # Use the structure that was previously saved, if desired
-            # { "filename": { "filename": ..., "doc_type": ..., "extracted_data": ... } }
-            output_data_for_json[filename] = {
-                'filename': filename,
-                'doc_type': doc_data.get('doc_type'),
-                'extracted_data': doc_data.get('extracted_data')
-            }
-            successful_extractions +=1
-        elif filename: # Even if there was an error, record it
-             output_data_for_json[filename] = doc_data # Save the error status
+        if filename:
+            output_data_for_json[filename] = doc_data  
+            status = doc_data.get('status', '')
+            if 'error' not in status and status not in ['skipped_extraction_no_content', 'error_loading']:
+                 successful_outcomes += 1
+        else:
+            logger.warning(f"Processed data item found without a filename: {doc_data}. This item will not be in the output JSON keyed by filename.")
 
-    if not os.path.exists(args.output_file):
-        os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
-        logger.info(f"Created directory for output file: {os.path.dirname(args.output_file)}")
+    output_dir = os.path.dirname(args.output_file)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        logger.info(f"Created directory for output file: {output_dir}")
 
     with open(args.output_file, 'w') as f:
         json.dump(output_data_for_json, f, indent=2)
     
-    logger.info(f"Extracted data for {successful_extractions} documents saved to {args.output_file}")
-
-    # --- Placeholder for Phase 3: Compliance Checks ---
-    compliance_instructions = args.instructions
-    if args.instructions_file:
-        try:
-            with open(args.instructions_file, 'r') as f_instr:
-                compliance_instructions = f_instr.read()
-            logger.info(f"Loaded compliance instructions from: {args.instructions_file}")
-        except FileNotFoundError:
-            logger.error(f"Instruction file not found: {args.instructions_file}")
-            compliance_instructions = None # Or handle as critical error
-    
-    if not compliance_instructions:
-        logger.error("No compliance instructions provided. Use --instructions or --instructions-file.")
-        # Depending on requirements, might exit or just skip compliance
-    else:
-        logger.info("Compliance instructions received. Processing would start here.")
-        # TODO: Initialize and run the compliance workflow (Phase 3)
-        # compliance_results = await run_compliance_workflow(processed_docs_data, compliance_instructions)
-        # logger.info(f"Compliance check results: {compliance_results}")
+    logger.info(f"Processed data for {len(output_data_for_json)} documents (with {successful_outcomes} considered successful outcomes) saved to {args.output_file}")
 
 if __name__ == "__main__":
     asyncio.run(main())

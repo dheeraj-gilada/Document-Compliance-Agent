@@ -22,7 +22,7 @@ class DocumentExtractor:
             document: A dictionary containing document details including:
                       'filename' (str): The name of the document.
                       'doc_type' (str): The inferred document type.
-                      'text_content' (str): The plain text content of the document.
+                      'text' (str): The plain text content of the document.
                       'tables_html' (List[str]): A list of HTML strings representing tables.
 
         Returns:
@@ -31,7 +31,7 @@ class DocumentExtractor:
         """
         filename = document.get('filename', 'unknown_file')
         doc_type = document.get('doc_type', 'unknown')
-        text_content = document.get('text_content', '')
+        text_content = document.get('text', '')
         tables_html_list = document.get('tables_html', [])
 
         if not text_content and not tables_html_list:

@@ -1,0 +1,221 @@
+{
+  "Truck Consignment Delivery Note.pdf": {
+    "filename": "Truck Consignment Delivery Note.pdf",
+    "doc_type": "goods_receipt_note",
+    "extracted_data": {
+      "goods_receipt_note": {
+        "document_id": "LACO-39",
+        "export_date": "2023-08-14",
+        "invoice_date": "2023-08-11",
+        "shipper": {
+          "name": "Leminar Air Conditioning Co LLC",
+          "address": {
+            "street": "P.O. Box 33539",
+            "city": "Dubai",
+            "country": "United Arab Emirates",
+            "contact": {
+              "phone": "+971 4 333 8700",
+              "showrooms": [
+                "+971 4 223 6910",
+                "+971 4 250 4423"
+              ]
+            }
+          }
+        },
+        "consignee": {
+          "country": "India"
+        },
+        "line_items": [
+          {
+            "description": "Rubber Support",
+            "hs_code": "40169990",
+            "country_of_origin": "India",
+            "weight": 552.0,
+            "unit_value_aed": 29733,
+            "total_value_aed": 16249.26
+          },
+          {
+            "description": "Spring Hanger",
+            "hs_code": "40169990",
+            "weight": 77.0,
+            "unit_value_aed": 22.05,
+            "total_value_aed": 6107.18
+          },
+          {
+            "description": "FJFF 65, FJFF 300, FJFF 75",
+            "hs_code": "40169990",
+            "country_of_origin": "India",
+            "weight": 470.0,
+            "unit_value_aed": 156.56,
+            "total_value_aed": 16438.44
+          },
+          {
+            "description": "Hattersley Valves",
+            "hs_code": "84818090",
+            "country_of_origin": "China",
+            "weight": 198.0,
+            "unit_value_aed": 204.91,
+            "total_value_aed": 5532.64
+          },
+          {
+            "description": "Clamp and Accessories",
+            "hs_code": "22057000",
+            "country_of_origin": "India",
+            "weight": 225.0,
+            "unit_value_aed": 2.7,
+            "total_value_aed": 7695.34
+          }
+        ],
+        "total_weight_kg": 1522,
+        "total_value_aed": 52022.86,
+        "total_value_in_words": "Fifty Two Thousand Twenty Two & 86/100 Dirhams Only",
+        "customs_declaration": {
+          "declaration_number": "203-04 144376-23",
+          "declaration_date": "2023-08-15",
+          "exporter_vat_trn": "100060237300003",
+          "exit_port": "Hatta (Al Wajajah)",
+          "destination": "Oman"
+        }
+      }
+    },
+    "status": "compliance_failed",
+    "compliance_details": {
+      "compliance_status": "non-compliant",
+      "findings": [
+        {
+          "rule_checked": "Invoice ID must be present and in the format INV-YYYY-NNN.",
+          "status": "error",
+          "details": "Invoice ID is missing from the document data."
+        },
+        {
+          "rule_checked": "Vendor name must not be 'ForbiddenCorp'.",
+          "status": "pass",
+          "details": "Vendor name is 'Leminar Air Conditioning Co LLC', which is compliant."
+        },
+        {
+          "rule_checked": "Invoice date must be before the due_date.",
+          "status": "error",
+          "details": "Due date is not provided in the document data."
+        },
+        {
+          "rule_checked": "Total amount must be greater than 0.",
+          "status": "pass",
+          "details": "Total amount is 52022.86, which is greater than 0."
+        },
+        {
+          "rule_checked": "All line items must have a positive quantity and unit_price.",
+          "status": "pass",
+          "details": "All line items have positive weights and unit prices."
+        },
+        {
+          "rule_checked": "The document must contain a clear delivery address.",
+          "status": "error",
+          "details": "Delivery address is incomplete; consignee address is missing."
+        },
+        {
+          "rule_checked": "If a PO Number is present, it must be alphanumeric.",
+          "status": "error",
+          "details": "PO Number is not present in the document data."
+        }
+      ]
+    }
+  },
+  "AI Engineer Challenge Invoice.PDF": {
+    "filename": "AI Engineer Challenge Invoice.PDF",
+    "doc_type": "invoice",
+    "extracted_data": {
+      "invoice": {
+        "tax_registration_number": "100060237300003",
+        "customer_number": "128659",
+        "invoice_number": "626867-ADS1-1",
+        "customer_name": "LEMINAR AIR CONDITIONING CO. LLC",
+        "invoice_date": "2023-08-12",
+        "sales_order_number": "SO-153412",
+        "bill_to_address": {
+          "po_box": "946",
+          "city": "Ruwi",
+          "country": "Oman"
+        },
+        "due_date": "2023-12-10",
+        "purchase_order_number": "1002475",
+        "sales_man": "BHAVYA RAKESH",
+        "delivery_note_number": "626867-ADS1-1",
+        "currency": "AED",
+        "exchange_rate": 1,
+        "project_name": "INTERCOMPANY",
+        "line_items": [
+          {
+            "item_code": "WEICCO Rubber Support Insert",
+            "description": "25mm",
+            "quantity": 35,
+            "uom": "SET",
+            "unit_price": 4.82,
+            "total_amount_excluding_vat": 168.7,
+            "vat_amount": 0.0,
+            "total_amount_including_vat": 168.7
+          }
+        ],
+        "total_amount_excluding_vat": 168.7,
+        "vat_amount": 0.0,
+        "total_amount_including_vat": 168.7,
+        "total_amount_in_words": "AED One Hundred Sixty Eight and 70/100 Only.",
+        "payment_terms": "LPO - 120 Days",
+        "bank_details": {
+          "bank_name": "",
+          "branch_name": "",
+          "account_number": "",
+          "iban": "",
+          "swift_code": ""
+        },
+        "ship_to_address": {
+          "po_box": "946",
+          "city": "Ruwi",
+          "country": "Oman"
+        },
+        "receiver_name": "Ofelia",
+        "authorized_by": ""
+      }
+    },
+    "status": "compliance_failed",
+    "compliance_details": {
+      "compliance_status": "non-compliant",
+      "findings": [
+        {
+          "rule_checked": "Invoice ID must be present and in the format INV-YYYY-NNN.",
+          "status": "error",
+          "details": "Invoice ID is missing from the document."
+        },
+        {
+          "rule_checked": "Vendor name must not be 'ForbiddenCorp'.",
+          "status": "pass",
+          "details": "Vendor name is 'LEMINAR AIR CONDITIONING CO. LLC', which is compliant."
+        },
+        {
+          "rule_checked": "Invoice date must be before the due_date.",
+          "status": "pass",
+          "details": "Invoice date '2023-08-12' is before due date '2023-12-10'."
+        },
+        {
+          "rule_checked": "Total amount must be greater than 0.",
+          "status": "pass",
+          "details": "Total amount is '168.7', which is greater than 0."
+        },
+        {
+          "rule_checked": "All line items must have a positive quantity and unit_price.",
+          "status": "pass",
+          "details": "Line item has quantity '35' and unit price '4.82', both are positive."
+        },
+        {
+          "rule_checked": "The document must contain a clear delivery address.",
+          "status": "pass",
+          "details": "Delivery address is provided with PO Box, city, and country."
+        },
+        {
+          "rule_checked": "If a PO Number is present, it must be alphanumeric.",
+          "status": "pass",
+          "details": "PO Number '1002475' is alphanumeric."
+        }
+      ]
+    }
+  }
+}

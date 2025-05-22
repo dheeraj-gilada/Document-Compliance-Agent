@@ -31,14 +31,34 @@ class StructuredDataExtractorAgent:
     ) -> Dict[str, Any]:
         """Extracts structured data from document content using an LLM."""
 
-        system_prompt = f"""You are an advanced AI data extraction assistant. Your task is to analyze the provided document content and its inferred type ('{doc_type}'), then extract all meaningful information into a structured JSON format.
-- Identify key entities, attributes, and relationships relevant to a document of type '{doc_type}'.
-- For tabular data, represent it as a list of objects, where each object corresponds to a row, using clear header-derived keys.
-- Ensure all extracted values are accurately represented (e.g., numbers as numbers, dates in YYYY-MM-DD if possible, otherwise as found).
-- The JSON structure should be intuitive and based on the document's content and type. Do not use a predefined schema unless the document type strongly implies one (e.g., common fields for an 'invoice' like 'invoice_number', 'total_amount', 'line_items').
-- If the document type is 'unknown' or 'other', be more general in your extraction, focusing on clear headings, sections, and data points.
-- Always return a single, valid JSON object. If no meaningful data can be extracted, return an empty JSON object {{}}.
-- For the document type '{doc_type}', prioritize extracting information that is typically important for such documents.
+        system_prompt = f"""You are an advanced AI data extraction assistant. Your task is to analyze the provided document content (both 'Text Content' and 'Tables') and its inferred type ('{doc_type}'), then extract ALL meaningful information into a structured JSON format.
+
+**Key Instructions:**
+1.  **Comprehensive Analysis:** Meticulously analyze the ENTIRE 'Text Content' section for standalone data points, key-value pairs, and important information, IN ADDITION to the structured 'Tables'. Do not solely rely on tables.
+2.  **Field Identification:**
+    *   Identify key entities, attributes, and relationships relevant to a document of type '{doc_type}'.
+    *   For common document types like 'invoice', 'purchase_order', 'delivery_note', actively look for fields such as:
+        *   Document ID (e.g., Invoice ID, PO Number, Delivery Note Number)
+        *   Dates (e.g., Issue Date, Due Date, Delivery Date)
+        *   Names & Roles (e.g., Vendor Name, Supplier Name, Customer Name, Buyer Name, Bill To, Ship To)
+        *   Addresses (e.g., Shipping Address, Billing Address, Vendor Address, Customer Address). Try to capture full addresses, including street, city, state, zip, and country if present, even if they span multiple lines.
+        *   Monetary Amounts (e.g., Subtotal, Total, VAT, Tax, Discounts)
+        *   Line Items / Product Details (description, quantity, unit price, total price per item).
+3.  **Data Representation:**
+    *   Represent tabular data as a list of objects, where each object corresponds to a row, using clear header-derived keys.
+    *   Ensure all extracted values are accurately represented (e.g., numbers as numbers, dates ideally in YYYY-MM-DD if clearly parsable, otherwise as found).
+    *   If information is present in multiple places (e.g., an address in text and also in a table), prioritize the most complete and structured representation.
+4.  **JSON Output Structure:**
+    *   The JSON structure should be intuitive and based on the document's content and type.
+    *   For specific document types like '{doc_type}', group related information under a main key (e.g., for an 'invoice', use a top-level key like `"invoice": {{{{...all invoice details...}}}}`).
+    *   **Key Standardization for Invoices:** When `doc_type` is 'invoice', ensure the primary invoice identifier is stored under the key `invoice_id`. The purchase order number should be under `purchase_order_number`. Other common fields should also use consistent, snake_case keys (e.g., `customer_name`, `vendor_name`, `due_date`, `total_amount`).
+    *   If the document type is 'unknown' or 'other', be more general in your extraction, focusing on clear headings, sections, and data points.
+5.  **Output Requirements:**
+    *   Always return a single, valid JSON object.
+    *   If NO meaningful data can be extracted from the entire document, return an empty JSON object {{}}.
+    *   Do NOT invent data. If a field is not present in the document, it should not be in the JSON.
+
+Prioritize extracting information that is typically important for a document of type '{doc_type}' from ALL provided content.
 """
         
         user_prompt = f"""Document Type: {doc_type}
@@ -50,7 +70,7 @@ Text Content:
 Tables (HTML format):
 {combined_tables_html}
 
-Extract all relevant information from the above content into a structured JSON format, keeping in mind the document type is '{doc_type}'."""
+Based on the System Prompt instructions, extract all relevant information from the above content into a single, structured JSON object. Ensure the JSON is well-formed and adheres to all guidelines mentioned in the system prompt, especially regarding the analysis of both Text Content and Tables for the document type '{doc_type}'."""
 
         try:
             response = await self.client.chat.completions.create(
@@ -66,7 +86,7 @@ Extract all relevant information from the above content into a structured JSON f
             extracted_json_str = response.choices[0].message.content
             if not extracted_json_str:
                 logger.warning(f"LLM returned empty response for {filename} ({doc_type}).")
-                return {{}}
+                return {}
             
             extracted_data = json.loads(extracted_json_str)
             logger.info(f"Successfully extracted structured data for {filename} ({doc_type}) using {self.model}.")
