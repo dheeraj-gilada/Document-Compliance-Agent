@@ -45,9 +45,119 @@ def ensure_dir_exists(filepath: str):
         os.makedirs(directory)
         logger.info(f"Created directory: {directory}")
 
+async def extract_document_data(docs_dir_to_process: str) -> Dict[str, Any]:
+    """Extracts data from documents without running compliance checks.
+    
+    This function is optimized for the Streamlit app to only process documents
+    without running compliance checks.
+    
+    Args:
+        docs_dir_to_process: Directory containing documents to process
+        
+    Returns:
+        Dictionary containing processed documents data
+    """
+    logger.info(f"Starting document extraction from directory: {docs_dir_to_process}")
+    
+    graph = create_document_processing_graph()
+    app = graph.compile()
+    
+    initial_state: DocumentProcessingState = {
+        "docs_dir": docs_dir_to_process,
+        "consolidated_rules_content": None,  # No rules for extraction-only
+        "initial_document_paths": [],
+        "document_queue": [],
+        "current_document_path": None,
+        "loaded_document_data": None,
+        "processed_documents": [],
+        "error_messages": [],
+        "aggregated_compliance_findings": [] 
+    }
+
+    try:
+        logger.info(f"Invoking document extraction workflow")
+        final_graph_state = await app.ainvoke(initial_state, config={"recursion_limit": 100})
+        
+        # Handle potential list wrapping from LangServe
+        if isinstance(final_graph_state, list) and final_graph_state and isinstance(final_graph_state[0], dict):
+            final_graph_state = final_graph_state[0]
+        elif not isinstance(final_graph_state, dict):
+            logger.error(f"Extraction workflow returned unexpected data type: {type(final_graph_state)}")
+            return {"processed_documents": [], "error_messages": [f"Workflow returned unexpected data type: {type(final_graph_state)}"]}
+
+        logger.info(f"Document extraction completed for {len(final_graph_state.get('processed_documents', []))} documents")
+        return final_graph_state
+
+    except Exception as e:
+        logger.error(f"Exception during document extraction: {e}", exc_info=True)
+        return {"processed_documents": [], "error_messages": [f"Document extraction failed: {str(e)}"]}
+
+
+async def run_compliance_check(extracted_documents: List[Dict[str, Any]], rules_content: str) -> Dict[str, Any]:
+    """
+    Runs compliance checks on already extracted document data.
+    
+    This function is optimized for the Streamlit app to run compliance checks
+    on previously extracted document data without reprocessing the documents.
+    
+    Args:
+        extracted_documents: List of previously extracted document data
+        rules_content: String containing the compliance rules
+        
+    Returns:
+        Dictionary containing compliance findings
+    """
+    logger.info(f"Running compliance checks with {len(extracted_documents)} documents")
+    
+    try:
+        # Parse the rules
+        from src.workflows.document_processing_workflow import _parse_rules
+        parsed_rules = _parse_rules(rules_content)
+        logger.info(f"Parsed {len(parsed_rules)} rules for compliance checking")
+        
+        # If no rules were parsed, return early with a helpful message
+        if not parsed_rules:
+            logger.warning("No rules were parsed from the provided rules content")
+            return {
+                "processed_documents": extracted_documents,
+                "aggregated_compliance_findings": [],
+                "error_messages": ["No compliance rules were parsed. Please check rule format."]
+            }
+        
+        # Create compliance agent
+        compliance_agent = UniversalComplianceAgent()
+        
+        # Run compliance checks for each rule
+        findings = []
+        for rule_id, rule_text in parsed_rules:
+            finding = await compliance_agent.evaluate_single_rule(
+                rule_id=rule_id,
+                rule_text=rule_text,
+                all_documents_data=extracted_documents
+            )
+            findings.append(finding)
+        
+        # Return results in the same format as the full workflow
+        return {
+            "processed_documents": extracted_documents,
+            "aggregated_compliance_findings": findings
+        }
+    except Exception as e:
+        logger.error(f"Exception during compliance checking: {e}", exc_info=True)
+        return {
+            "processed_documents": extracted_documents,
+            "aggregated_compliance_findings": [],
+            "error_messages": [f"Compliance checking failed: {str(e)}"]
+        }
+
+
 async def run_document_processing(docs_dir_to_process: str, consolidated_rules_input: Optional[str] = None) -> Dict[str, Any]:
-    """Invokes the document processing LangGraph workflow and returns processed documents and all compliance findings."""
-    logger.info(f"Starting document processing workflow for directory: {docs_dir_to_process}")
+    """Invokes the document processing LangGraph workflow and returns processed documents and all compliance findings.
+    
+    This function runs the full pipeline (extraction + compliance) and is maintained for backward compatibility.
+    For Streamlit, consider using extract_document_data and run_compliance_check separately for better efficiency.
+    """
+    logger.info(f"Starting full document processing workflow for directory: {docs_dir_to_process}")
     if consolidated_rules_input:
         logger.info("Consolidated compliance rules provided and will be used in the workflow.")
     else:
@@ -90,6 +200,7 @@ async def run_document_processing(docs_dir_to_process: str, consolidated_rules_i
     except Exception as e:
         logger.error(f"Exception during document processing workflow execution (ainvoke): {e}", exc_info=True)
         return {"processed_documents": [], "aggregated_compliance_findings": [], "error_messages": [f"Workflow execution failed: {str(e)}"]}
+
 
 async def main():
     parser = argparse.ArgumentParser(description="Intelligent Document Compliance & Process Automation Agent")

@@ -6,21 +6,42 @@ import asyncio
 import json
 import uuid # Added for unique rule IDs
 
+# Workaround for PyTorch and Streamlit watcher conflict
+import sys
+if 'torch' in sys.modules:
+    import torch
+    # Monkey patch torch._classes to avoid the error with Streamlit's watcher
+    if hasattr(torch, '_classes'):
+        torch._classes.__getattr__ = lambda self, attr: None
+
 # This MUST be the first Streamlit command.
 st.set_page_config(layout="wide", page_title="Intelligent Document Compliance Agent")
 
-# Attempt to import the processing function from main.py
+# Attempt to import the processing functions from main.py
 processing_function_imported = False
-run_document_processing_func = None
 try:
-    from main import run_document_processing
-    run_document_processing_func = run_document_processing
+    from main import run_document_processing, extract_document_data, run_compliance_check
     processing_function_imported = True
 except ImportError as e:
-    import_error_message = f"Critical Error: Could not import 'run_document_processing' from main.py: {e}. Ensure main.py is in the correct path and all its dependencies are installed. The application cannot proceed."
+    import_error_message = f"Critical Error: Could not import processing functions from main.py: {e}. Ensure main.py is in the correct path and all its dependencies are installed. The application cannot proceed."
     # We will display this error inside main_app
 
-# Define a dummy function for fallback if needed, though the app should ideally not run fully without the real one
+# Define dummy functions for fallback if needed
+async def dummy_extract_document_data(docs_dir):
+    await asyncio.sleep(1)
+    return {
+        "processed_documents": [{"filename": "dummy.pdf", "error": "Backend function not loaded"}],
+        "error_messages": ["Document extraction function not loaded"]
+    }
+
+async def dummy_run_compliance_check(extracted_documents, rules_content):
+    await asyncio.sleep(1)
+    return {
+        "processed_documents": extracted_documents,
+        "aggregated_compliance_findings": [{"rule_id": "1", "rule_checked": "Dummy Rule", "status": "error", "details": "Backend function not loaded"}],
+        "error_messages": ["Compliance check function not loaded"]
+    }
+
 async def dummy_run_document_processing(docs_dir, rules_content):
     await asyncio.sleep(1)
     return {
@@ -28,15 +49,30 @@ async def dummy_run_document_processing(docs_dir, rules_content):
         "aggregated_compliance_findings": [{"rule": "Dummy Rule", "error": "Backend function not loaded"}]
     }
 
+# Assign dummy functions if import failed
 if not processing_function_imported:
-    run_document_processing_func = dummy_run_document_processing # Assign dummy if import failed
+    extract_document_data = dummy_extract_document_data
+    run_compliance_check = dummy_run_compliance_check
+    run_document_processing = dummy_run_document_processing
 
 def main_app():
-    # Initialize session state for rules if not already present
+    # Initialize session state variables if they don't exist
     if 'rules_list_data' not in st.session_state:
         st.session_state.rules_list_data = []  # List of dicts: {'id': str, 'text': str}
-    if 'current_new_rule_text' not in st.session_state: # For the 'Add Rule' input field
+    if 'current_new_rule_text' not in st.session_state:
         st.session_state.current_new_rule_text = ""
+    if 'compliance_results' not in st.session_state:
+        st.session_state.compliance_results = None
+    if 'csv_data' not in st.session_state:
+        st.session_state.csv_data = None
+    if 'has_new_results' not in st.session_state:
+        st.session_state.has_new_results = False
+    if 'extracted_data' not in st.session_state:
+        st.session_state.extracted_data = None
+    if 'processed_docs' not in st.session_state:
+        st.session_state.processed_docs = []  # List to track processed document filenames
+    if 'temp_docs_dir' not in st.session_state:
+        st.session_state.temp_docs_dir = None
 
     st.title("Intelligent Document Compliance & Process Automation Agent")
 
@@ -106,95 +142,247 @@ def main_app():
         
         st.markdown("---") # Separator
 
-        run_button = st.button("Run Compliance Check", type="primary", use_container_width=True)
+        # Two buttons: one for processing documents, one for compliance check
+        col1, col2 = st.columns(2)
+        with col1:
+            process_docs_button = st.button("1️⃣ Process Documents", type="secondary", use_container_width=True, 
+                                         help="Extract data from documents without running compliance checks")
+        with col2:
+            run_compliance_button = st.button("2️⃣ Run Compliance Check", type="primary", use_container_width=True,
+                                           help="Run compliance checks on processed documents using the rules")
 
     # --- Main Area for Outputs ---
     st.header("Results")
 
-    if run_button:
+    # Process Documents Button Logic
+    if process_docs_button:
         if not uploaded_files:
             st.warning("Please upload at least one document.")
-        elif not st.session_state.rules_list_data: # Check if the list of rules is empty
-            st.warning("Please add at least one compliance rule.")
         else:
-            with st.spinner("Processing documents and checking compliance..."):
-                temp_docs_dir = None
-                try:
-                    # 1. Create a temporary directory for uploaded files
-                    temp_docs_dir = tempfile.mkdtemp()
-                    # st.info(f"Temporary directory created: {temp_docs_dir}") # Can be verbose
-
-                    # 2. Save uploaded files to the temporary directory
-                    for uploaded_file in uploaded_files:
-                        file_path = os.path.join(temp_docs_dir, uploaded_file.name)
+            with st.spinner("Processing documents..."):
+                # Check if we need to create a new temp directory or use existing one
+                if not st.session_state.temp_docs_dir or not os.path.exists(st.session_state.temp_docs_dir):
+                    st.session_state.temp_docs_dir = tempfile.mkdtemp()
+                    st.session_state.processed_docs = []  # Reset processed docs list if creating new directory
+                
+                # Track which files are new and need processing
+                new_files = []
+                for uploaded_file in uploaded_files:
+                    file_path = os.path.join(st.session_state.temp_docs_dir, uploaded_file.name)
+                    # Check if this file is already processed
+                    if uploaded_file.name not in st.session_state.processed_docs:
                         with open(file_path, "wb") as f:
                             f.write(uploaded_file.getbuffer())
-                        # st.write(f"Saved {uploaded_file.name} to temp dir.") # Can be verbose
+                        new_files.append(uploaded_file.name)
+                        st.session_state.processed_docs.append(uploaded_file.name)
+                
+                if not new_files:
+                    st.info("All documents have already been processed. Upload new documents or run compliance checks.")
+                else:
+                    st.info(f"Processing {len(new_files)} new document(s): {', '.join(new_files)}")
                     
-                    # 3. Format rules for the backend from session_state.rules_list_data
+                    try:
+                        # Use the optimized extract_document_data function
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        extracted_data = loop.run_until_complete(extract_document_data(st.session_state.temp_docs_dir))
+                    except RuntimeError as e:
+                        if "cannot be called from a running event loop" in str(e):
+                            st.warning("Asyncio runtime error. Trying with nest_asyncio.")
+                            import nest_asyncio
+                            nest_asyncio.apply()
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            extracted_data = loop.run_until_complete(extract_document_data(st.session_state.temp_docs_dir))
+                        else:
+                            raise e
+                    
+                    # Store extracted data in session state
+                    st.session_state.extracted_data = extracted_data
+                    
+                    st.success(f"Successfully processed {len(new_files)} document(s)!")
+                    st.info("You can now run compliance checks using the 'Run Compliance Check' button.")
+
+    # Run Compliance Check Button Logic
+    if run_compliance_button:
+        if not st.session_state.processed_docs:
+            st.warning("Please process at least one document first using the 'Process Documents' button.")
+        elif not st.session_state.rules_list_data:
+            st.warning("Please add at least one compliance rule.")
+        elif not st.session_state.extracted_data:
+            st.warning("No extracted data found. Please process documents first.")
+        else:
+            with st.spinner("Running compliance checks..."):
+                try:
+                    # Format rules for the backend
                     rules_for_backend_list = []
                     for i, rule_item in enumerate(st.session_state.rules_list_data):
-                        # Ensure rule_item['text'] is up-to-date from its input field
-                        # The direct edit in the loop above should handle this for text_input
-                        # If using st.text_area per rule, would need explicit key access
                         rule_text_from_state = rule_item.get('text', '').strip()
                         if rule_text_from_state: # Only add non-empty rules
                            rules_for_backend_list.append(f"{i+1}. {rule_text_from_state}")
                     rules_for_backend = "\n".join(rules_for_backend_list)
                     
-                    # DEBUG: Print rules being sent to backend
-                    # print(f"DEBUG: Rules sent to backend:\n{rules_for_backend}")
-                    # st.subheader("DEBUG: Formatted Rules for Backend")
-                    # st.text(rules_for_backend if rules_for_backend else "No rules formatted.")
-
-                    st.info("Invoking backend processing workflow...")
-                    try:
+                    st.info(f"Running compliance checks with {len(rules_for_backend_list)} rules...")
+                    
+                    # Use the optimized run_compliance_check function
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    # Get the extracted documents from session state
+                    extracted_docs = st.session_state.extracted_data.get("processed_documents", [])
+                    
+                    # Ensure documents are in the correct format for the compliance agent
+                    formatted_docs = []
+                    for doc in extracted_docs:
+                        # Create a properly formatted document with required fields
+                        formatted_doc = {
+                            "filename": doc.get("filename", "unknown_file"),
+                            "doc_type": doc.get("doc_type", doc.get("document_type", "Unknown Type")),
+                            "extracted_data": doc.get("extracted_data", {})
+                        }
+                        formatted_docs.append(formatted_doc)
+                    
+                    # Run compliance checks using the optimized function
+                    results = loop.run_until_complete(run_compliance_check(formatted_docs, rules_for_backend))
+                except RuntimeError as e:
+                    if "cannot be called from a running event loop" in str(e):
+                        st.warning("Asyncio runtime error. Trying with nest_asyncio.")
+                        import nest_asyncio
+                        nest_asyncio.apply()
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-                        results = loop.run_until_complete(run_document_processing_func(temp_docs_dir, rules_for_backend))
-                    except RuntimeError as e:
-                        if "cannot be called from a running event loop" in str(e):
-                            st.warning("Asyncio runtime error. Trying with nest_asyncio. Please install it if not present (`pip install nest_asyncio`) and rerun.")
-                            import nest_asyncio
-                            nest_asyncio.apply()
-                            loop = asyncio.new_event_loop() # Get a new loop after applying nest_asyncio
-                            asyncio.set_event_loop(loop)
-                            results = loop.run_until_complete(run_document_processing_func(temp_docs_dir, rules_for_backend))
-                        else:
-                            raise e # Re-raise other runtime errors
-
-                    st.success("Processing workflow completed!")
-
-                    # 5. Display results
-                    processed_docs = results.get("processed_documents", [])
-                    compliance_findings = results.get("aggregated_compliance_findings", [])
-                    errors = results.get("error_messages", [])
-
-                    if errors:
-                        st.subheader("Processing Errors")
-                        for error_msg in errors:
-                            st.error(error_msg)
-
-                    st.subheader("Extracted Document Data")
-                    if processed_docs:
-                        st.json(processed_docs)
+                        
+                        # Reuse the same document formatting code
+                        extracted_docs = st.session_state.extracted_data.get("processed_documents", [])
+                        formatted_docs = []
+                        for doc in extracted_docs:
+                            formatted_doc = {
+                                "filename": doc.get("filename", "unknown_file"),
+                                "doc_type": doc.get("doc_type", doc.get("document_type", "Unknown Type")),
+                                "extracted_data": doc.get("extracted_data", {})
+                            }
+                            formatted_docs.append(formatted_doc)
+                        
+                        # Run compliance checks
+                        results = loop.run_until_complete(run_compliance_check(formatted_docs, rules_for_backend))
                     else:
-                        st.info("No document data was extracted or returned.")
+                        raise e
+                
+                # Store compliance results in session state
+                st.session_state.compliance_results = results
+                st.session_state.has_new_results = True
+                
+                # Check for error messages
+                error_messages = results.get("error_messages", [])
+                if error_messages:
+                    for error in error_messages:
+                        st.error(f"Error during compliance check: {error}")
+                else:
+                    st.success("Compliance checks completed!")
+                    
+                # Store results for display
+                findings = results.get("aggregated_compliance_findings", [])
 
-                    st.subheader("Compliance Findings")
-                    if compliance_findings:
-                        st.json(compliance_findings)
-                    else:
-                        st.info("No compliance findings were generated or returned.")
+    # Cleanup temp directory on app exit (if needed)
+    if st.session_state.temp_docs_dir and os.path.exists(st.session_state.temp_docs_dir):
+        # We don't actually want to delete the temp directory here since we need it for future runs
+        # This is handled by the atexit module in Python, which will clean up temp directories
+        pass
 
-                except Exception as e:
-                    st.error(f"An error occurred during processing: {e}")
-                    import traceback
-                    st.text(traceback.format_exc())
-                finally:
-                    if temp_docs_dir and os.path.exists(temp_docs_dir):
-                        shutil.rmtree(temp_docs_dir)
-                        # st.info(f"Temporary directory {temp_docs_dir} cleaned up.") # Can be verbose
+    # Display results section - outside the run button logic so it persists across reruns
+    if st.session_state.compliance_results:
+        st.subheader("Processing Results")
+        # Display Compliance Findings
+        st.header("📊 Compliance Findings")
+        results = st.session_state.compliance_results
+        compliance_findings = results.get("aggregated_compliance_findings", [])
+        if not compliance_findings:
+            st.info("No compliance findings were generated.")
+        else:
+            # Create a CSV for download
+            import pandas as pd
+            import io
+            
+            # Prepare data for CSV
+            data = []
+            for finding in compliance_findings:
+                # Get the involved documents, ensuring it's a list
+                involved_docs = finding.get('involved_documents', [])
+                if not isinstance(involved_docs, list):
+                    involved_docs = [str(involved_docs)] if involved_docs else []
+                
+                # Only include documents that are actually relevant to this rule
+                # This prevents listing all documents for every rule
+                data.append({
+                    "Rule ID": finding.get('rule_id', 'N/A'),
+                    "Rule Checked": finding.get('rule_checked', 'N/A'),
+                    "Status": finding.get('status', 'N/A'),
+                    "Details": finding.get('details', 'No details provided.'),
+                    "Involved Document(s)": ", ".join(involved_docs) if involved_docs else 'None'
+                })
+            
+            # Create CSV for download button
+            df = pd.DataFrame(data)
+            csv = df.to_csv(index=False)
+            
+            # Store the CSV in session state
+            st.session_state.csv_data = csv
+            
+            # Add download button at the top
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                # Use a key for the download button to prevent rerun issues
+                st.download_button(
+                    label="📥 Download as CSV",
+                    data=st.session_state.csv_data,
+                    file_name="compliance_findings.csv",
+                    mime="text/csv",
+                    key="download_csv_button"
+                )
+            
+            # Display findings as cards
+            for i, finding in enumerate(compliance_findings):
+                rule_id = finding.get('rule_id', 'N/A')
+                rule_checked = finding.get('rule_checked', 'N/A')
+                status = finding.get('status', 'N/A')
+                details = finding.get('details', 'No details provided.')
+                involved_docs = finding.get('involved_documents', [])
+                
+                # Determine card styling based on status
+                if status.lower() == 'compliant':
+                    border_color = "#28a745"  # Green
+                    status_color = "#28a745"   # Green
+                    status_icon = "✅"         # Checkmark
+                elif status.lower() == 'non-compliant' or status.lower() == 'non_compliant':
+                    border_color = "#dc3545"  # Red
+                    status_color = "#dc3545"   # Red
+                    status_icon = "❌"         # X mark
+                else:
+                    border_color = "#ffc107"  # Yellow/amber
+                    status_color = "#ffc107"   # Yellow/amber
+                    status_icon = "⚠️"         # Warning
+                
+                # Create a card-like container with custom styling
+                st.markdown(f"""
+                <div style="
+                    background-color: transparent;
+                    border: 2px solid {border_color};
+                    border-radius: 10px;
+                    padding: 15px;
+                    margin-bottom: 15px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+                ">
+                    <h3 style="margin-top: 0;">Rule {rule_id}: {rule_checked}</h3>
+                    <p style="
+                        font-weight: bold;
+                        color: {status_color};
+                        font-size: 1.1em;
+                    ">{status_icon} Status: {status.title()}</p>
+                    <p><strong>Details:</strong> {details}</p>
+                    <p><strong>Involved Document(s):</strong></p>
+                    {"<ul>" + "".join([f"<li>{doc}</li>" for doc in involved_docs]) + "</ul>" if involved_docs else "<p>No specific documents involved</p>"}
+                </div>
+                """, unsafe_allow_html=True)
     else:
         st.info("Upload documents and enter rules, then click 'Run Compliance Check' to start.")
 

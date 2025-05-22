@@ -30,7 +30,7 @@ class UniversalComplianceAgent:
     -   "rule_checked": The exact text of the rule.
     -   "status": "pass", "fail", "error", or "not_applicable".
     -   "details": A clear explanation of your finding. If 'fail', explain why. If 'pass', briefly confirm. If 'error', describe the issue. If 'not_applicable', explain why; if this is because the rule targets a specific document type (e.g., 'Purchase Order') and no such documents were provided, explicitly state this connection (e.g., 'This rule is specific to Purchase Order documents. As no Purchase Orders were found in the batch, this rule is not applicable.').
-    -   "involved_documents": A list of filenames of the documents that were primarily involved in checking this specific rule. This can be one or more filenames. If 'not_applicable' because no relevant document types were present, this list can be empty.
+    -   "involved_documents": A list of filenames of ONLY the documents that are DIRECTLY relevant to this specific rule. For example, if a rule is about VAT on invoices, only include invoice documents. If a rule is about matching PO numbers, include only the documents that contain the relevant PO numbers. Do NOT include documents that were checked but found to be irrelevant to the rule.
 
     Example of a finding for a single-document rule:
     {
@@ -97,7 +97,7 @@ You MUST output a SINGLE JSON object representing the compliance finding for the
 *   **Scope:** Evaluate ONLY the single rule provided.
 *   **Accuracy:** Be precise. Base your findings strictly on the data within the provided documents.
 *   **Clarity:** Ensure your 'details' field is easy to understand.
-*   **Involved Documents:** List all documents that you considered or that influenced your decision for this specific rule. If a rule is 'not_applicable' because a 'Purchase Order' is required but none was provided, list all document filenames that were checked.
+*   **Involved Documents:** List ONLY the documents that are DIRECTLY relevant to this specific rule. For example, if a rule is about VAT on invoices, only include invoice documents. If a rule is about matching PO numbers, include only the documents that contain the relevant PO numbers. Do NOT include documents that were checked but found to be irrelevant to the rule.
 *   **JSON Format:** Ensure your output is a valid JSON object as specified.
 """
 
