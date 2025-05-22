@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # Import utility modules
 from src.utils.config import DOCS_DIR
 from src.workflows.document_processing_workflow import create_document_processing_graph, DocumentProcessingState
+from src.agents.universal_compliance_agent import UniversalComplianceAgent
 
 def load_rules_from_file(filepath: str) -> Optional[str]:
     """Loads consolidated rules from a file."""
@@ -37,6 +38,13 @@ def load_rules_from_file(filepath: str) -> Optional[str]:
         logger.error(f"Error loading rules from {filepath}: {e}")
         return None
 
+def ensure_dir_exists(filepath: str):
+    """Ensures the directory for the given filepath exists."""
+    directory = os.path.dirname(filepath)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory)
+        logger.info(f"Created directory: {directory}")
+
 async def run_document_processing(docs_dir_to_process: str, consolidated_rules_input: Optional[str] = None) -> Dict[str, Any]:
     """Invokes the document processing LangGraph workflow and returns processed documents and all compliance findings."""
     logger.info(f"Starting document processing workflow for directory: {docs_dir_to_process}")
@@ -50,14 +58,14 @@ async def run_document_processing(docs_dir_to_process: str, consolidated_rules_i
     
     initial_state: DocumentProcessingState = {
         "docs_dir": docs_dir_to_process,
-        "consolidated_rules_content": consolidated_rules_input, # Use the new consolidated rules content
+        "consolidated_rules_content": consolidated_rules_input, 
         "initial_document_paths": [],
         "document_queue": [],
         "current_document_path": None,
         "loaded_document_data": None,
         "processed_documents": [],
         "error_messages": [],
-        "all_compliance_findings": [] # Initialize for universal agent results
+        "all_compliance_findings": [] 
     }
 
     final_graph_state = None
@@ -65,7 +73,7 @@ async def run_document_processing(docs_dir_to_process: str, consolidated_rules_i
         async for event in app.astream_events(initial_state, version="v1"):
             kind = event["event"]
             if kind == "on_chain_end":
-                if event["name"] == "LangGraph": # Check for the end of the main graph execution
+                if event["name"] == "LangGraph": 
                     final_graph_state = event["data"]["output"]
                     logger.info("Document processing workflow completed.")
             elif kind == "on_chain_error":
@@ -76,8 +84,6 @@ async def run_document_processing(docs_dir_to_process: str, consolidated_rules_i
             return final_graph_state
         else:
             logger.error("Workflow did not complete successfully or final state not captured.")
-            # Return a structure indicating failure or partial results based on last known good state if available
-            # For now, returning a minimal dict to avoid downstream errors, but this could be improved.
             return {"processed_documents": initial_state.get("processed_documents", []), "all_compliance_findings": [], "error_messages": initial_state.get("error_messages", []) + ["Workflow did not reach final state."]}
 
     except Exception as e:
@@ -87,119 +93,145 @@ async def run_document_processing(docs_dir_to_process: str, consolidated_rules_i
 async def main():
     parser = argparse.ArgumentParser(description="Intelligent Document Compliance & Process Automation Agent")
     parser.add_argument("--docs_dir", type=str, default=DOCS_DIR, 
-                        help="Directory containing documents to process.")
-    parser.add_argument("--output_file", type=str, 
+                        help="Directory containing documents to process. Used in 'extract' and 'full' modes.")
+    parser.add_argument("--mode", type=str, choices=['extract', 'compliance', 'full'], default='full',
+                        help="Operation mode: 'extract' (only data extraction), 'compliance' (only compliance checks on existing data), 'full' (both).")
+    parser.add_argument("--extraction-output-file", type=str, 
                         default=os.path.join("extracted_data", "all_extracted_data.json"), 
-                        help="File to save all processed data, including extraction and compliance results.")
-    parser.add_argument("--rules-file", type=str, required=True, help="Path to the consolidated compliance rules file.")
+                        help="File to save extracted document data. Used in 'extract' and 'full' modes.")
+    parser.add_argument("--extracted-data-input", type=str, 
+                        default=os.path.join("extracted_data", "all_extracted_data.json"), 
+                        help="File to load extracted document data from. Used in 'compliance' mode.")
+    parser.add_argument("--compliance-output-file", type=str, 
+                        default=os.path.join("reports", "compliance_checks.json"), 
+                        help="File to save compliance findings. Used in 'compliance' and 'full' modes.")
+    parser.add_argument("--rules-file", type=str, help="Path to the consolidated compliance rules file. Required for 'compliance' and 'full' modes.")
 
     args = parser.parse_args()
 
-    consolidated_rules_text = load_rules_from_file(args.rules_file)
-    if not consolidated_rules_text:
-        logger.error(f"Failed to load rules from {args.rules_file}. Exiting as rules are required.")
-        return
+    if args.mode in ['compliance', 'full'] and not args.rules_file:
+        parser.error("--rules-file is required for 'compliance' and 'full' modes.")
 
-    logger.info(f"Consolidated rules loaded successfully from {args.rules_file}.")
-    logger.info(f"Starting document processing from: {args.docs_dir}")
+    processed_documents_list = []
+    all_findings = []
+    actual_state_data = {}
 
-    # Pass the loaded consolidated rules to the workflow
-    processed_workflow_output = await run_document_processing(args.docs_dir, consolidated_rules_text)
-
-    # --- BEGIN DEBUG LOGS (Revised) ---
-    logger.info(f"DEBUG main: processed_workflow_output type: {type(processed_workflow_output)}")
-    actual_state_data = None
-
-    if isinstance(processed_workflow_output, dict) or hasattr(processed_workflow_output, 'keys'):
-        output_top_keys = list(processed_workflow_output.keys())
-        logger.info(f"DEBUG main: processed_workflow_output top-level keys: {output_top_keys}")
-
-        # Check if the state is nested under the last node's name
-        if 'universal_compliance_check' in output_top_keys and \
-           (isinstance(processed_workflow_output.get('universal_compliance_check'), dict) or \
-            hasattr(processed_workflow_output.get('universal_compliance_check'), 'keys')):
-            
-            logger.info("DEBUG main: Assuming nested state under 'universal_compliance_check'. Accessing it.")
-            actual_state_data = processed_workflow_output['universal_compliance_check']
-            
-            # Verify if this nested dict contains the expected keys from the node's return
-            if isinstance(actual_state_data, dict) or hasattr(actual_state_data, 'keys'):
-                nested_keys = list(actual_state_data.keys())
-                logger.info(f"DEBUG main: Keys within processed_workflow_output['universal_compliance_check']: {nested_keys}")
-                if not ('processed_documents' in nested_keys and 'all_compliance_findings' in nested_keys):
-                    logger.warning("DEBUG main: Nested dict from 'universal_compliance_check' is missing expected state keys. This might indicate an issue in the workflow node's return value.")
-                    # Fallback or further investigation might be needed if this occurs.
+    if args.mode == 'extract' or args.mode == 'full':
+        logger.info(f"Starting document extraction from: {args.docs_dir}")
+        rules_for_workflow = None
+        if args.mode == 'full':
+            rules_for_workflow = load_rules_from_file(args.rules_file)
+            if not rules_for_workflow:
+                logger.error(f"Failed to load rules from {args.rules_file} for 'full' mode. Exiting.")
+                return
+            logger.info(f"Consolidated rules loaded for 'full' mode workflow.")
+        
+        processed_workflow_output = await run_document_processing(args.docs_dir, rules_for_workflow)
+        
+        logger.info(f"DEBUG main: processed_workflow_output type: {type(processed_workflow_output)}")
+        if isinstance(processed_workflow_output, dict) or hasattr(processed_workflow_output, 'keys'):
+            output_top_keys = list(processed_workflow_output.keys())
+            logger.info(f"DEBUG main: processed_workflow_output top-level keys: {output_top_keys}")
+            if 'universal_compliance_check' in output_top_keys and \
+               (isinstance(processed_workflow_output.get('universal_compliance_check'), dict) or \
+                hasattr(processed_workflow_output.get('universal_compliance_check'), 'keys')):
+                actual_state_data = processed_workflow_output['universal_compliance_check']
+            elif 'processed_documents' in output_top_keys: 
+                actual_state_data = processed_workflow_output
             else:
-                logger.warning("DEBUG main: Value under 'universal_compliance_check' is not dictionary-like as expected.")
-                actual_state_data = {} # Prevent crash, but data is missing
-
-        elif 'processed_documents' in output_top_keys and 'all_compliance_findings' in output_top_keys:
-            logger.info("DEBUG main: processed_workflow_output appears to be a flat state dictionary already.")
-            actual_state_data = processed_workflow_output
+                logger.warning("DEBUG main: Could not determine structure of processed_workflow_output.")
+                actual_state_data = {}
         else:
-            logger.warning("DEBUG main: Could not determine structure of processed_workflow_output. Expected keys ('processed_documents', 'all_compliance_findings') not found at top-level or standard nested location. Output keys: %s", output_top_keys)
-            actual_state_data = {} # Fallback to empty dict to prevent crash
-    else:
-        logger.error("DEBUG main: processed_workflow_output is not dictionary-like. Cannot retrieve state.")
-        actual_state_data = {}
+            logger.error("DEBUG main: processed_workflow_output is not dictionary-like.")
+            actual_state_data = {}
 
-    logger.info(f"DEBUG main: actual_state_data type after processing: {type(actual_state_data)}")
-    if isinstance(actual_state_data, dict) or hasattr(actual_state_data, 'keys'):
-        logger.info(f"DEBUG main: actual_state_data final keys for processing: {list(actual_state_data.keys())}")
-    # --- END DEBUG LOGS ---
+        processed_documents_list = actual_state_data.get('processed_documents', [])
+        if not isinstance(processed_documents_list, list):
+            logger.warning(f"'processed_documents' in actual_state_data is not a list. Defaulting to empty list.")
+            processed_documents_list = []
 
-    output_data_for_json = {}
-    successful_outcomes = 0
-    
-    # Ensure 'processed_documents' is a list, even if workflow had issues or data is missing
-    processed_documents_list = actual_state_data.get('processed_documents', [])
-    if not isinstance(processed_documents_list, list):
-        logger.warning(f"'processed_documents' in actual_state_data is not a list: {processed_documents_list}. Defaulting to empty list.")
-        processed_documents_list = []
+        ensure_dir_exists(args.extraction_output_file)
+        with open(args.extraction_output_file, 'w') as f_extract:
+            json.dump(processed_documents_list, f_extract, indent=2)
+        logger.info(f"Extracted data for {len(processed_documents_list)} documents saved to {args.extraction_output_file}")
 
-    for doc_data in processed_documents_list:
-        filename = doc_data.get('filename')
-        if filename:
-            output_data_for_json[filename] = doc_data  
-            status = doc_data.get('status', '')
-            if 'error' not in status and status not in ['skipped_extraction_no_content', 'error_loading_document', 'error_file_not_found', 'error_classifying_document', 'error_extracting_data']:
-                 successful_outcomes += 1
-        else:
-            logger.warning(f"Processed data item found without a filename: {doc_data}. This item will not be in the output JSON keyed by filename.")
+        if args.mode == 'full':
+            all_findings = actual_state_data.get('all_compliance_findings', [])
+            if not isinstance(all_findings, list):
+                logger.warning(f"'all_compliance_findings' in actual_state_data is not a list. Defaulting to empty list.")
+                all_findings = []
 
-    output_dir = os.path.dirname(args.output_file)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"Created directory for output file: {output_dir}")
+    if args.mode == 'compliance':
+        logger.info(f"Starting compliance check mode.")
+        try:
+            with open(args.extracted_data_input, 'r') as f_input_data:
+                processed_documents_list = json.load(f_input_data)
+            if not isinstance(processed_documents_list, list):
+                logger.error(f"Data in {args.extracted_data_input} is not a list. Exiting compliance mode.")
+                return
+            logger.info(f"Successfully loaded {len(processed_documents_list)} processed document records from {args.extracted_data_input}.")
+        except FileNotFoundError:
+            logger.error(f"Extracted data input file not found: {args.extracted_data_input}. Exiting compliance mode.")
+            return
+        except json.JSONDecodeError:
+            logger.error(f"Error decoding JSON from {args.extracted_data_input}. Exiting compliance mode.")
+            return
+        
+        consolidated_rules_text = load_rules_from_file(args.rules_file)
+        if not consolidated_rules_text:
+            logger.error(f"Failed to load rules from {args.rules_file} for 'compliance' mode. Exiting.")
+            return
+        logger.info(f"Consolidated rules loaded for 'compliance' mode.")
 
-    # Use 'all_compliance_findings' from the actual_state_data
-    all_findings = actual_state_data.get('all_compliance_findings', [])
-    if not isinstance(all_findings, list):
-        logger.warning(f"'all_compliance_findings' in actual_state_data is not a list: {all_findings}. Defaulting to empty list.")
-        all_findings = []
+        input_for_universal_agent = []
+        for doc_data in processed_documents_list:
+            if (doc_data.get("status") in ["data_extracted", "classified"] and 
+                doc_data.get("filename") and 
+                doc_data.get("doc_type") and 
+                doc_data.get("extracted_data") is not None):
+                input_for_universal_agent.append({
+                    "filename": doc_data["filename"],
+                    "doc_type": doc_data["doc_type"],
+                    "extracted_data": doc_data["extracted_data"]
+                })
+            elif (doc_data.get("status") == "classified" and doc_data.get("extracted_data") is None):
+                 input_for_universal_agent.append({
+                    "filename": doc_data["filename"],
+                    "doc_type": doc_data["doc_type"],
+                    "extracted_data": {} 
+                })
 
-    final_json_output = {
-        "individual_document_results": output_data_for_json,
-        "all_compliance_findings": all_findings # Updated key for universal findings
-    }
+        if not input_for_universal_agent and processed_documents_list:
+            logger.warning("No suitable documents found for compliance check after filtering from loaded data.")
+        
+        agent = UniversalComplianceAgent()
+        try:
+            logger.info(f"Performing compliance checks for {len(input_for_universal_agent)} documents.")
+            all_findings = await agent.check_all_compliance(
+                input_for_universal_agent,
+                consolidated_rules_text
+            )
+            logger.info(f"Compliance check completed. {len(all_findings)} findings generated.")
+        except Exception as e:
+            logger.error(f"Error during compliance agent invocation: {e}", exc_info=True)
+            all_findings = [] 
 
-    with open(args.output_file, 'w') as f:
-        json.dump(final_json_output, f, indent=2)
-    
-    logger.info(f"Processed data for {len(output_data_for_json)} documents (with {successful_outcomes} considered successful outcomes) and all compliance findings saved to {args.output_file}")
+    if args.mode in ['compliance', 'full']:
+        ensure_dir_exists(args.compliance_output_file)
+        with open(args.compliance_output_file, 'w') as f_compliance:
+            json.dump(all_findings, f_compliance, indent=2)
+        logger.info(f"Compliance findings saved to {args.compliance_output_file}")
 
-    # Print all compliance findings to console
-    if all_findings:
-        logger.info("\nUniversal Compliance Findings:")
-        for finding in all_findings:
-            # Adjust logging to match the typical structure of universal findings
-            logger.info(f"  Rule ID: {finding.get('rule_id', 'N/A')}, Rule Text: {finding.get('rule_text', 'N/A')}, Status: {finding.get('status', 'N/A')}, Details: {finding.get('details', 'N/A')}, Involved: {finding.get('involved_documents', [])}")
-    elif processed_workflow_output.get("error_messages"):
-        logger.warning("Workflow completed with errors, and no compliance findings were generated.")
-        for err_msg in processed_workflow_output.get("error_messages", []):
-            logger.error(f"  Workflow Error: {err_msg}")
-    else:
-        logger.info("No compliance findings were generated (this may be normal if no rules were applicable or an error occurred upstream).")
+        if all_findings:
+            logger.info("\nUniversal Compliance Findings:")
+            for finding in all_findings:
+                logger.info(f"  Rule ID: {finding.get('rule_id', 'N/A')}, Rule Text: {finding.get('rule_text', 'N/A')}, Status: {finding.get('status', 'N/A')}, Details: {finding.get('details', 'N/A')}, Involved: {finding.get('involved_documents', [])}")
+        elif args.mode == 'compliance': 
+             logger.info("No compliance findings were generated in 'compliance' mode.")
+        # For 'full' mode, workflow errors would be logged by run_document_processing or the debug block above.
+
+    logger.info(f"Process completed for mode: {args.mode}.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

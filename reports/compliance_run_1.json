@@ -1,0 +1,135 @@
+[
+  {
+    "rule_id": "1",
+    "rule_checked": "Each document must have a clearly identifiable document type (e.g., invoice, purchase_order, goods_receipt_note).",
+    "status": "pass",
+    "details": "Both documents have clearly identifiable types: 'goods_receipt_note' for 'Truck Consignment Delivery Note.pdf' and 'invoice' for 'AI Engineer Challenge Invoice.PDF'.",
+    "involved_documents": [
+      "Truck Consignment Delivery Note.pdf",
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "2",
+    "rule_checked": "All monetary amounts must be positive.",
+    "status": "pass",
+    "details": "All monetary amounts in both documents are positive. 'Truck Consignment Delivery Note.pdf' has total_value_aed of 52022.86 and 'AI Engineer Challenge Invoice.PDF' has total_amount_including_vat of 168.7.",
+    "involved_documents": [
+      "Truck Consignment Delivery Note.pdf",
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "3",
+    "rule_checked": "Invoice Number must be present and unique within the batch if multiple invoices are present.",
+    "status": "not_applicable",
+    "details": "Only one invoice is present in the batch ('AI Engineer Challenge Invoice.PDF'), so uniqueness cannot be evaluated.",
+    "involved_documents": []
+  },
+  {
+    "rule_id": "4",
+    "rule_checked": "Invoice Date must be present and valid.",
+    "status": "pass",
+    "details": "The Invoice Date in 'AI Engineer Challenge Invoice.PDF' is '2023-08-12', which is present and valid.",
+    "involved_documents": [
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "5",
+    "rule_checked": "Total amount on an Invoice must be greater than 0.",
+    "status": "pass",
+    "details": "The total amount on the Invoice 'AI Engineer Challenge Invoice.PDF' is 168.7, which is greater than 0.",
+    "involved_documents": [
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "6",
+    "rule_checked": "All line items on an Invoice must have a positive quantity and unit_price.",
+    "status": "pass",
+    "details": "The line item in 'AI Engineer Challenge Invoice.PDF' has a quantity of 35 and a unit_price of 4.82, both of which are positive.",
+    "involved_documents": [
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "7",
+    "rule_checked": "The Invoice must contain a clear delivery address.",
+    "status": "pass",
+    "details": "The Invoice 'AI Engineer Challenge Invoice.PDF' contains a clear delivery address: PO Box 946, Ruwi, Oman.",
+    "involved_documents": [
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "8",
+    "rule_checked": "If a PO Number is present on an Invoice, it should only contain alphabets.",
+    "status": "fail",
+    "details": "The PO Number '1002475' in 'AI Engineer Challenge Invoice.PDF' contains digits, which violates the rule.",
+    "involved_documents": [
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "8b",
+    "rule_checked": "If an Invoice document includes a purchase_order_number field, it must not be empty.",
+    "status": "pass",
+    "details": "The purchase_order_number field in 'AI Engineer Challenge Invoice.PDF' is '1002475', which is not empty.",
+    "involved_documents": [
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "9",
+    "rule_checked": "Purchase Order Number must be present.",
+    "status": "not_applicable",
+    "details": "No Purchase Order documents are present in the batch, therefore this rule is not applicable.",
+    "involved_documents": []
+  },
+  {
+    "rule_id": "10",
+    "rule_checked": "Purchase Order Date must be present.",
+    "status": "not_applicable",
+    "details": "No Purchase Order documents are present in the batch, therefore this rule is not applicable.",
+    "involved_documents": []
+  },
+  {
+    "rule_id": "11",
+    "rule_checked": "If an Invoice and a Purchase Order are present for what appears to be the same transaction, the Invoice total_amount_including_vat should match the Purchase Order total_amount.",
+    "status": "not_applicable",
+    "details": "No Purchase Order documents are present in the batch, therefore this rule is not applicable.",
+    "involved_documents": []
+  },
+  {
+    "rule_id": "12",
+    "rule_checked": "If an Invoice and a Purchase Order are present for the same transaction, the Invoice date should be on or after the Purchase Order date.",
+    "status": "not_applicable",
+    "details": "No Purchase Order documents are present in the batch, therefore this rule is not applicable.",
+    "involved_documents": []
+  },
+  {
+    "rule_id": "13",
+    "rule_checked": "If a Goods Receipt Note and an Invoice are present for the same transaction, all line items (by description and quantity) on the Goods Receipt Note should be present on the Invoice.",
+    "status": "fail",
+    "details": "The Goods Receipt Note 'Truck Consignment Delivery Note.pdf' has line items that are not present in the Invoice 'AI Engineer Challenge Invoice.PDF'. Specifically, 'Rubber Support' is not matched by description or quantity.",
+    "involved_documents": [
+      "Truck Consignment Delivery Note.pdf",
+      "AI Engineer Challenge Invoice.PDF"
+    ]
+  },
+  {
+    "rule_id": "14",
+    "rule_checked": "If a Purchase Order is present, its po_number should be referenced in the corresponding Invoice if one exists in the batch.",
+    "status": "not_applicable",
+    "details": "No Purchase Order documents are present in the batch, therefore this rule is not applicable.",
+    "involved_documents": []
+  },
+  {
+    "rule_id": "15",
+    "rule_checked": "The currency should be consistent across all related financial documents (e.g., Invoice, PO) if they are part of the same transaction.",
+    "status": "not_applicable",
+    "details": "No Purchase Order documents are present in the batch, therefore this rule is not applicable.",
+    "involved_documents": []
+  }
+]

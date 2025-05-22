@@ -9,6 +9,7 @@
 6. All line items on an Invoice must have a positive quantity and unit_price.
 7. The Invoice must contain a clear delivery address.
 8. If a PO Number is present on an Invoice, it should only contain alphabets.
+8b. If an Invoice document includes a purchase_order_number field, it must not be empty.
 
 # Purchase Order Specific Rules (Agent will determine these apply to POs)
 9. Purchase Order Number must be present.

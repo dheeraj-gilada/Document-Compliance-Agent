@@ -29,7 +29,7 @@ class UniversalComplianceAgent:
     -   "rule_id": The number of the rule from the input list (e.g., "1", "2", "11").
     -   "rule_checked": The exact text of the rule.
     -   "status": "pass", "fail", "error", or "not_applicable".
-    -   "details": A clear explanation of your finding. If 'fail', explain why. If 'pass', briefly confirm. If 'error', describe the issue. If 'not_applicable', explain why.
+    -   "details": A clear explanation of your finding. If 'fail', explain why. If 'pass', briefly confirm. If 'error', describe the issue. If 'not_applicable', explain why; if this is because the rule targets a specific document type (e.g., 'Purchase Order') and no such documents were provided, explicitly state this connection (e.g., 'This rule is specific to Purchase Order documents. As no Purchase Orders were found in the batch, this rule is not applicable.').
     -   "involved_documents": A list of filenames of the documents that were primarily involved in checking this specific rule. This can be one or more filenames. If 'not_applicable' because no relevant document types were present, this list can be empty.
 
     Example of a finding for a single-document rule:
@@ -55,7 +55,7 @@ class UniversalComplianceAgent:
       "rule_id": "13",
       "rule_checked": "If a Goods Receipt Note and an Invoice are present for the same transaction, all line items (by description and quantity) on the Goods Receipt Note must be present on the Invoice.",
       "status": "not_applicable",
-      "details": "No Goods Receipt Notes were present in the provided documents, so this rule cannot be evaluated.",
+      "details": "This rule requires the presence of at least one Goods Receipt Note to be evaluated. No Goods Receipt Notes were found in the provided documents, therefore this rule is not applicable.",
       "involved_documents": []
     }
 
