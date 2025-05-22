@@ -4,18 +4,13 @@ import os
 import logging
 from typing import Dict, List, Any
 
-import openai
 from unstructured.partition.pdf import partition_pdf
 from unstructured.partition.text import partition_text # For .txt files
 from unstructured.documents.elements import Element, Table # Element is general, Table is specific
 
-logger = logging.getLogger(__name__)
+from src.agents.document_classifier_agent import DocumentTypeClassifierAgent
 
-# Ensure OPENAI_API_KEY is set
-if not os.getenv("OPENAI_API_KEY"):
-    logger.error("OPENAI_API_KEY environment variable not set.")
-    # You might want to raise an exception here or handle it as per your app's design
-    # For now, we'll let it proceed, but OpenAI calls will fail.
+logger = logging.getLogger(__name__)
 
 class DocumentLoader:
     """Loads documents using Unstructured, with 'hi_res' strategy for PDFs."""
@@ -26,6 +21,7 @@ class DocumentLoader:
             docs_dir: Directory containing the documents.
         """
         self.docs_dir = docs_dir
+        self.classifier_agent = DocumentTypeClassifierAgent()
 
     def list_documents(self) -> List[str]:
         """
@@ -43,53 +39,21 @@ class DocumentLoader:
         ]
 
     async def _infer_document_type_with_llm(self, filename: str, text_sample: str) -> str:
-        """Infers document type using an LLM based on filename and text sample."""
-        if not os.getenv("OPENAI_API_KEY"):
-            logger.error("Cannot infer document type with LLM: OPENAI_API_KEY not set.")
-            return "unknown_api_key_missing"
-
-        prompt = f"""Analyze the following document filename and a sample of its text content to determine its primary type.
-Focus on common business document types like 'invoice', 'purchase_order', 'goods_receipt_note', 'credit_note', 'debit_note', 'contract', 'policy_document', 'financial_statement', 'report', 'datasheet', 'specification', 'form', 'letter', 'memo', 'resume', 'presentation_slides', 'technical_manual', 'legal_document', 'regulatory_filing', 'other'.
-
-Filename: {filename}
-
-Text Sample (first 500 characters):
-{text_sample[:500]}
-
-Based on the filename and text sample, what is the most likely document type? Respond with only the document type string (e.g., 'invoice', 'purchase_order', 'unknown').
-If the type is unclear or not a common business document, respond with 'unknown'.
-Document Type:"""
-
-        try:
-            client = openai.AsyncOpenAI()
-            response = await client.chat.completions.create(
-                model="gpt-4o-mini", # Using gpt-4o-mini as per project memory
-                messages=[
-                    {"role": "system", "content": "You are an expert document classifier."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2,
-                max_tokens=50
-            )
-            doc_type = response.choices[0].message.content.strip().lower().replace(" ", "_")
-            logger.info(f"LLM inferred document type for {filename} as: {doc_type}")
-            return doc_type if doc_type else "unknown_llm_error"
-        except Exception as e:
-            logger.error(f"Error during LLM document type inference for {filename}: {e}", exc_info=True)
-            return "unknown_llm_error"
+        """Infers document type using the DocumentTypeClassifierAgent."""
+        return await self.classifier_agent.infer_document_type(filename, text_sample)
 
     async def load_document(self, filename: str) -> Dict[str, Any]:
         """
         Loads a document and extracts its elements using Unstructured.
         For PDFs, uses the 'hi_res' strategy.
-        Infers document type using an LLM.
+        Infers document type using the DocumentTypeClassifierAgent.
         
         Args:
             filename: Name of the document file.
             
         Returns:
             Dictionary with document metadata, extracted Unstructured elements (serialized),
-            plain text, extracted tables (as HTML strings), and LLM-inferred doc_type.
+            plain text, extracted tables (as HTML strings), and inferred doc_type.
         """
         filepath = os.path.join(self.docs_dir, filename)
         if not os.path.exists(filepath):
@@ -124,7 +88,7 @@ Document Type:"""
 
             text_content = "\n\n".join([el.text for el in elements if el.text is not None])
             
-            # Infer document type using LLM with filename and a sample of text content
+            # Infer document type using the DocumentTypeClassifierAgent with filename and a sample of text content
             doc_type = await self._infer_document_type_with_llm(filename, text_content)
 
             tables_html = []

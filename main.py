@@ -111,7 +111,7 @@ async def load_and_extract_documents(docs_dir: str) -> Dict[str, Dict[str, Any]]
                 continue
 
             # Extract structured data
-            extracted_data = extractor.extract_data(document)
+            extracted_data = await extractor.extract_data(document)
             
             # Log the top-level keys from extracted_data for quick review
             if 'extracted_data' in extracted_data and isinstance(extracted_data['extracted_data'], dict):

@@ -3,76 +3,80 @@
     "filename": "Truck Consignment Delivery Note.pdf",
     "doc_type": "goods_receipt_note",
     "extracted_data": {
-      "document_type": "goods_receipt_note",
-      "export_details": {
-        "date_of_export": "2023-08-14",
-        "invoice_date": "2023-08-11",
-        "invoice_number": "LACO-39",
-        "currency": "AED"
-      },
-      "shipper": {
-        "name": "Leminar Air Conditioning Co LLC",
-        "address": "Dubai P.O. Box 33539",
-        "contact": {
-          "telephone": "+971 4 333 8700",
-          "showrooms": [
-            "+971 4 223 6910",
-            "+971 4 250 4423"
-          ]
-        }
-      },
-      "consignee": {
-        "country": "India"
-      },
-      "goods": [
-        {
-          "description": "Rubber Support",
-          "hs_code": "40169990",
-          "unit_value": 156.56,
-          "total_value": 16249.26,
-          "weight": 552.0
+      "goods_receipt_note": {
+        "export_details": {
+          "date_of_export": "2023-08-14",
+          "invoice_date": "2023-08-11",
+          "invoice_number": "LACO-39",
+          "currency": "AED"
         },
-        {
-          "description": "Spring Hanger",
-          "hs_code": "40169990",
-          "unit_value": 22.05,
-          "total_value": 6107.18,
-          "weight": 77.0
+        "items": [
+          {
+            "sr_no": 1,
+            "description": "Rubber Support",
+            "hs_code": "40169990",
+            "origin": "India",
+            "weight_kg": 552.0,
+            "unit_value_aed": 0.55,
+            "total_value_aed": 16249.26
+          },
+          {
+            "sr_no": 2,
+            "description": "Spring Hanger",
+            "hs_code": "40169990",
+            "origin": "",
+            "weight_kg": 77.0,
+            "unit_value_aed": 22.05,
+            "total_value_aed": 6107.18
+          },
+          {
+            "sr_no": 3,
+            "description": "FJFF 65, FJFF 300, FJFF 75",
+            "hs_code": "40169990",
+            "origin": "India",
+            "weight_kg": 470.0,
+            "unit_value_aed": 156.56,
+            "total_value_aed": 16438.44
+          },
+          {
+            "sr_no": 4,
+            "description": "Hattersley Valves",
+            "hs_code": "#4818090",
+            "origin": "China",
+            "weight_kg": 198.0,
+            "unit_value_aed": 204.91,
+            "total_value_aed": 5532.64
+          },
+          {
+            "sr_no": 5,
+            "description": "Clamp and Accessories",
+            "hs_code": "22057000",
+            "origin": "India",
+            "weight_kg": 225.0,
+            "unit_value_aed": 2.7,
+            "total_value_aed": 7695.34
+          }
+        ],
+        "summary": {
+          "total_weight_kg": 1522,
+          "total_value_aed": 52022.86,
+          "total_value_in_words": "Fifty Two Thousand Twenty Two & 86/100 Dirhams Only"
         },
-        {
-          "description": "FJFF 65, FJFF 300, FJFF 75",
-          "hs_code": "40169990",
-          "unit_value": 156.56,
-          "total_value": 16438.44,
-          "weight": 470.0
-        },
-        {
-          "description": "Hattersley Valves",
-          "hs_code": "84818090",
-          "unit_value": 204.91,
-          "total_value": 5532.64,
-          "weight": 198.0
-        },
-        {
-          "description": "Clamp and Accessories",
-          "hs_code": "82057000",
-          "unit_value": 2.7,
-          "total_value": 7695.34,
-          "weight": 225.0
-        }
-      ],
-      "total": {
-        "weight": 1522,
-        "total_value": 52022.86,
-        "total_value_in_words": "Fifty Two Thousand Twenty Two & 86/100 Dirhams Only"
-      },
-      "customs_details": {
-        "exporter": "Leminar Air Conditioning Co LLC",
         "customs_declaration": {
-          "date": "2023-08-15",
-          "declaration_number": "203-04144376-23"
+          "declaration_number": "203-04 144376-23",
+          "net_weight_kg": 1522,
+          "gross_weight_kg": 1522,
+          "number_of_packages": 1,
+          "exporter_vat_trn": "100060237300003",
+          "destination": "Oman"
         },
-        "destination": "Oman"
+        "delivery_details": {
+          "delivery_order_number": "AE-1011839",
+          "carrier_name": "Leminar Air Conditioning Co LLC",
+          "port_of_loading": "Dubai",
+          "port_of_discharge": "",
+          "voyage_flight": "319303"
+        }
       }
     }
   },
@@ -81,50 +85,39 @@
     "doc_type": "invoice",
     "extracted_data": {
       "invoice": {
-        "tax_registration_number": "100060237300003",
-        "customer_number": "128659",
-        "invoice_number": "626867-ADS1-1",
-        "customer_name": "LEMINAR AIR CONDITIONING CO. LLC",
-        "invoice_date": "2023-08-12",
-        "sales_order_number": "SO-153412",
-        "bill_to_address": {
-          "p_o_box": "946",
-          "city": "Ruwi",
-          "country": "Oman"
-        },
-        "due_date": "2023-12-10",
-        "purchase_order_number": "1002475",
-        "sales_man": "BHAVYA RAKESH",
-        "delivery_note_number": "626867-ADS1-1",
-        "currency": "AED",
-        "exchange_rate": 1,
-        "project_name": "INTERCOMPANY",
         "line_items": [
           {
-            "item_code": "WEICCO Rubber Support Insert 25mm",
-            "description": "35.00",
-            "quantity": 35,
-            "uom": "SET",
-            "unit_price": 4.82,
-            "total_amount_excluding_vat": 168.7,
-            "vat": 0.0,
-            "vat_number": "RSI",
-            "total_amount_including_vat": 168.7
+            "description": "WEICCO Rubber Support Insert",
+            "size": "25mm",
+            "unit_price": 35.0,
+            "unit": "SET",
+            "quantity": 4.82,
+            "amount_excluding_vat": 168.7,
+            "amount_including_vat": 168.7
           }
         ],
-        "total_amount_excluding_vat": 168.7,
-        "vat_amount": 0.0,
-        "total_amount_including_vat": 168.7,
-        "total_amount_in_words": "One Hundred Sixty Eight and 70/100 Only",
-        "payment_terms": "LPO - 120 Days",
-        "ship_to_address": {
-          "p_o_box": "946",
-          "city": "Ruwi",
-          "country": "Oman"
+        "total_amount": {
+          "amount_in_words": "One Hundred Sixty Eight and 70/100 Only",
+          "amount_including_vat": 168.7
         },
-        "receiver_name": "Ofelia",
-        "authorized_by": null,
-        "prepared_by": null
+        "payment_terms": "LPO- 120 Days",
+        "bank_details": {
+          "bank_name": "Ruwi",
+          "branch_name": "Oman",
+          "account_number": "",
+          "swift_code": ""
+        },
+        "shipping_address": {
+          "po_box": "946"
+        },
+        "prepared_by": {
+          "name": "Ofelia",
+          "authorized_by": ""
+        },
+        "receiver_signature": {
+          "name": "",
+          "date": ""
+        }
       }
     }
   }
