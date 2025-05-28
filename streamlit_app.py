@@ -95,8 +95,27 @@ def main_app():
                 st.button("🗑️", key=f"delete_{rule_item['id']}", on_click=delete_rule_callback, args=(rule_item['id'],), help="Delete this rule", disabled=ui_disabled)
 
         st.text_input("Enter new rule text:", key="input_new_rule_text_key", placeholder="Type your rule here and click 'Add Rule'", disabled=ui_disabled)
-        st.button("Add Rule", on_click=add_new_rule_callback, use_container_width=True, disabled=ui_disabled)
-        st.markdown("---")
+        st.button("Add New Rule", on_click=add_new_rule_callback, key="add_rule_main_button", disabled=ui_disabled, use_container_width=True)
+        
+        st.markdown("---_---_---")
+
+        # --- Run Compliance Checks Button --- 
+        rules_are_present_for_button = any(rule.get('text', '').strip() for rule in st.session_state.rules_list_data)
+        extracted_data_is_available_for_button = bool(st.session_state.extracted_data_cache and st.session_state.extracted_data_cache.get("processed_documents") is not None)
+        can_run_compliance = extracted_data_is_available_for_button and rules_are_present_for_button
+
+        if st.button("Run Compliance Checks", key="run_compliance_button", disabled=ui_disabled or not can_run_compliance, use_container_width=True, type="primary"):
+            if can_run_compliance: # Double check, though disabled state should handle this
+                logger.info("Compliance check triggered by button.")
+                st.session_state.is_checking_compliance = True
+                st.session_state.error_message = None # Clear previous errors
+                st.session_state.compliance_results = None # Clear previous results
+                st.rerun()
+            elif not extracted_data_is_available_for_button:
+                st.warning("Please upload and process documents first.") # Should not be reachable if button disabled correctly
+            elif not rules_are_present_for_button:
+                st.warning("Please add compliance rules first.") # Should not be reachable
+        # --- End Run Compliance Checks Button ---
 
     st.header("Results")
 
@@ -112,20 +131,8 @@ def main_app():
             st.session_state.compliance_results = None
             st.session_state.error_message = None
             st.rerun()
-    
-    if not st.session_state.is_extracting and not st.session_state.is_checking_compliance:
-        rules_are_present = any(rule.get('text', '').strip() for rule in st.session_state.rules_list_data)
-        extracted_data_is_available = bool(st.session_state.extracted_data_cache and st.session_state.extracted_data_cache.get("processed_documents") is not None)
-        rules_changed_since_last_check = (current_rules_representation != st.session_state.rules_cache)
-        
-        needs_compliance_run = extracted_data_is_available and rules_are_present and \
-                               (not st.session_state.compliance_results or rules_changed_since_last_check)
-
-        if needs_compliance_run:
-            logger.info("Conditions met for compliance check, triggering.")
-            st.session_state.is_checking_compliance = True
-            st.session_state.error_message = None
-            st.rerun()
+    # Automatic compliance trigger based on data/rule changes has been removed.
+    # Compliance checks are now initiated by the 'Run Compliance Checks' button.
 
     if st.session_state.is_extracting:
         if not uploaded_files:
