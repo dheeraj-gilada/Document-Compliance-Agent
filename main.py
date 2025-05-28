@@ -130,12 +130,27 @@ async def run_compliance_check(extracted_documents: List[Dict[str, Any]], rules_
         # Run compliance checks for each rule
         findings = []
         for rule_id, rule_text in parsed_rules:
-            finding = await compliance_agent.evaluate_single_rule(
+            raw_finding = await compliance_agent.evaluate_single_rule(
                 rule_id=rule_id,
                 rule_text=rule_text,
                 all_documents_data=extracted_documents
             )
-            findings.append(finding)
+            # Determine the boolean 'is_compliant' status
+            is_compliant_bool = raw_finding.get('status', '').lower() == 'compliant'
+            
+            # Create the final finding dictionary with the 'is_compliant' key
+            # This ensures all expected keys are present and correctly formatted.
+            # We also preserve other keys from raw_finding like rule_id, rule_checked, details, involved_documents.
+            processed_finding = {
+                'rule_id': raw_finding.get('rule_id', rule_id),
+                'rule_checked': raw_finding.get('rule_checked', rule_text),
+                'status': raw_finding.get('status', 'error'), # Keep original status for potential debugging
+                'is_compliant': is_compliant_bool,
+                'reason': raw_finding.get('details', 'No details provided.'), # Map 'details' to 'reason' as Streamlit expects
+                'details': raw_finding.get('details', 'No details provided.'), # Keep 'details' too for consistency if used elsewhere
+                'involved_documents': raw_finding.get('involved_documents', [])
+            }
+            findings.append(processed_finding)
         
         # Return results in the same format as the full workflow
         return {
