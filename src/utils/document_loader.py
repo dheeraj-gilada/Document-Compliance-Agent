@@ -4,15 +4,33 @@ import os
 import logging
 from typing import Dict, List, Any
 
-from unstructured.partition.pdf import partition_pdf
-from unstructured.partition.text import partition_text # For .txt files
-from unstructured.partition.docx import partition_docx # For .docx files
-from unstructured.partition.image import partition_image # For image files
-from unstructured.documents.elements import Element, Table # Element is general, Table is specific
-
-from src.agents.document_classifier_agent import DocumentTypeClassifierAgent
-
 logger = logging.getLogger(__name__)
+
+# Temporarily disable unstructured library due to compatibility issues
+UNSTRUCTURED_AVAILABLE = False
+logger.warning("Document processing temporarily disabled due to unstructured library compatibility issues")
+
+# Define dummy functions to prevent errors
+def partition_pdf(*args, **kwargs): return []
+def partition_text(*args, **kwargs): return []
+def partition_docx(*args, **kwargs): return []
+def partition_image(*args, **kwargs): return []
+Element = None
+Table = None
+
+# TODO: Re-enable unstructured library after resolving compatibility issues
+# The issue appears to be a bus error during import, likely related to binary dependencies
+
+# Import the classifier agent with error handling
+try:
+    from src.agents.document_classifier_agent import DocumentTypeClassifierAgent
+    CLASSIFIER_AVAILABLE = True
+except ImportError as e:
+    logger.error(f"Failed to import DocumentTypeClassifierAgent: {e}")
+    CLASSIFIER_AVAILABLE = False
+    class DocumentTypeClassifierAgent:
+        async def infer_document_type(self, filename: str, text_sample: str) -> str:
+            return "unknown"
 
 class DocumentLoader:
     """Loads documents using Unstructured, with 'hi_res' strategy for PDFs."""
@@ -23,7 +41,10 @@ class DocumentLoader:
             docs_dir: Directory containing the documents.
         """
         self.docs_dir = docs_dir
-        self.classifier_agent = DocumentTypeClassifierAgent()
+        if CLASSIFIER_AVAILABLE:
+            self.classifier_agent = DocumentTypeClassifierAgent()
+        else:
+            self.classifier_agent = DocumentTypeClassifierAgent()  # Will use the dummy class
 
     def list_documents(self) -> List[str]:
         """
@@ -62,8 +83,20 @@ class DocumentLoader:
             logger.error(f"Document {filepath} not found.")
             raise FileNotFoundError(f"Document {filepath} not found")
 
+        if not UNSTRUCTURED_AVAILABLE:
+            logger.warning(f"Cannot process document {filename}: unstructured library not available")
+            return {
+                'filename': filename,
+                'filepath': filepath,
+                'elements': [],
+                'text': f'Document processing unavailable - unstructured library not installed properly',
+                'tables_html': [],
+                'doc_type': await self._infer_document_type_with_llm(filename, 'Error: processing unavailable'),
+                'error_message': 'unstructured library not available'
+            }
+
         file_ext = os.path.splitext(filename)[1].lower()
-        elements: List[Element] = []
+        elements = []
 
         try:
             if file_ext == '.pdf':
@@ -104,7 +137,7 @@ class DocumentLoader:
 
             tables_html = []
             for el in elements:
-                if isinstance(el, Table):
+                if Table is not None and isinstance(el, Table):
                     if hasattr(el, 'metadata') and hasattr(el.metadata, 'text_as_html') and el.metadata.text_as_html:
                         tables_html.append(el.metadata.text_as_html)
                     else:
@@ -112,8 +145,12 @@ class DocumentLoader:
                         # Fallback: wrap raw table text in pre tags if HTML is not available
                         tables_html.append(f"<pre>{el.text}</pre>")
 
-
-            serialized_elements = [el.to_dict() for el in elements]
+            # Handle serialization gracefully
+            try:
+                serialized_elements = [el.to_dict() for el in elements if hasattr(el, 'to_dict')]
+            except Exception as e:
+                logger.warning(f"Could not serialize elements for {filename}: {e}")
+                serialized_elements = []
 
             return {
                 'filename': filename,

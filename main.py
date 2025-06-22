@@ -59,8 +59,7 @@ async def extract_document_data(docs_dir_to_process: str) -> Dict[str, Any]:
     """
     logger.info(f"Starting document extraction from directory: {docs_dir_to_process}")
     
-    graph = create_document_processing_graph()
-    app = graph.compile()
+    app = create_document_processing_graph()
     
     initial_state: DocumentProcessingState = {
         "docs_dir": docs_dir_to_process,
@@ -178,8 +177,7 @@ async def run_document_processing(docs_dir_to_process: str, consolidated_rules_i
     else:
         logger.info("No consolidated compliance rules provided; universal compliance checks might be limited or skipped.")
     
-    graph = create_document_processing_graph()
-    app = graph.compile()
+    app = create_document_processing_graph()
     
     initial_state: DocumentProcessingState = {
         "docs_dir": docs_dir_to_process,

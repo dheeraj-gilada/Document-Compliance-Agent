@@ -15,7 +15,9 @@ from src.agents.universal_compliance_agent import UniversalComplianceAgent
 logger = logging.getLogger(__name__)
 
 # --- State Definition (Revised) ---
-class DocumentProcessingState(dict):
+from typing_extensions import TypedDict
+
+class DocumentProcessingState(TypedDict):
     docs_dir: str
     consolidated_rules_content: Optional[str]
     initial_document_paths: List[str]
@@ -328,6 +330,8 @@ def should_continue_rule_evaluation(state: DocumentProcessingState) -> str:
 
 # --- Graph Assembly (Revised) ---
 def create_document_processing_graph():
+    from langgraph.graph import START
+    
     workflow = StateGraph(DocumentProcessingState)
 
     # Document processing loop nodes
@@ -341,7 +345,8 @@ def create_document_processing_graph():
     workflow.add_node("get_next_rule", get_next_rule_node)
     workflow.add_node("evaluate_single_rule", evaluate_single_rule_node)
 
-    workflow.set_entry_point("list_files")
+    # Use START instead of set_entry_point for newer LangGraph versions
+    workflow.add_edge(START, "list_files")
 
     workflow.add_edge("list_files", "get_next_document")
     workflow.add_edge("load_and_classify", "extract_data")
@@ -373,7 +378,7 @@ def create_document_processing_graph():
     workflow.add_edge("evaluate_single_rule", "get_next_rule")
     
     logger.info("Document processing graph with rule-level evaluation structure created.")
-    return workflow
+    return workflow.compile()
 
 # Example of how to run (for testing, typically called from main.py)
 async def example_run():
