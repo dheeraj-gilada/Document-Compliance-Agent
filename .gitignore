@@ -5,3 +5,4 @@ doc_compliance_env/
 reports/
 extracted_data/
 .cache/
+.env
