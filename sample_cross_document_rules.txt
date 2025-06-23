@@ -1,4 +1,0 @@
-1. The Invoice total_amount_including_vat must match the Purchase Order total_amount if both documents are present.
-2. The Invoice date must be on or after the Purchase Order date if both documents are present.
-3. All line items (by description and quantity) on the Goods Receipt Note must be present on the Invoice.
-4. If a Purchase Order is present, its po_number must be referenced in the Invoice (e.g., as purchase_order_number or in a notes field).

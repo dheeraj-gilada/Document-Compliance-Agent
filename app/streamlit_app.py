@@ -6,6 +6,16 @@ import asyncio
 import json
 import uuid
 import logging
+import sys
+
+# --- Path Correction ---
+# Add the project root to the Python path to allow imports from 'src'
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# ---
+
+from src.utils.cache_manager import DocumentCacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +106,44 @@ def main_app():
 
         st.text_input("Enter new rule text:", key="input_new_rule_text_key", placeholder="Type your rule here and click 'Add Rule'", disabled=ui_disabled)
         st.button("Add New Rule", on_click=add_new_rule_callback, key="add_rule_main_button", disabled=ui_disabled, use_container_width=True)
+        
+        st.markdown("---_---_---")
+        
+        # Cache Statistics Section
+        st.subheader("📊 Performance Cache")
+        try:
+            cache_manager = DocumentCacheManager()
+            cache_stats = cache_manager.get_cache_stats()
+            
+            if cache_stats.get("total_cached_documents", 0) > 0:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Cached Docs", cache_stats.get("total_cached_documents", 0))
+                    st.metric("Time Saved", f"{cache_stats.get('total_processing_time_saved', 0):.1f}s")
+                with col2:
+                    st.metric("Avg Processing", f"{cache_stats.get('average_processing_time', 0):.1f}s")
+                    st.metric("Cache Size", f"{cache_stats.get('database_size_mb', 0):.1f}MB")
+                
+                # Cache management buttons
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🗑️ Clear Cache", disabled=ui_disabled, help="Clear all cached documents"):
+                        cache_manager.clear_cache()
+                        st.success("Cache cleared!")
+                        st.rerun()
+                with col2:
+                    if st.button("🧹 Clear Old", disabled=ui_disabled, help="Clear cache entries older than 7 days"):
+                        cleared = cache_manager.clear_cache(older_than_days=7)
+                        if cleared > 0:
+                            st.success(f"Cleared {cleared} old entries!")
+                        else:
+                            st.info("No old entries to clear")
+                        st.rerun()
+            else:
+                st.info("No cached documents yet")
+                
+        except Exception as e:
+            st.error(f"Cache error: {e}")
         
         st.markdown("---_---_---")
 

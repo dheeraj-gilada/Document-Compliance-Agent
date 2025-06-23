@@ -15,8 +15,8 @@ OPENAI_MODEL = "gpt-4o-mini"  # Using a valid OpenAI model
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Project paths
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DOCS_DIR = os.path.join(PROJECT_ROOT, "docs")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Go up one level less since we're now in app/
+DOCS_DIR = os.path.join(PROJECT_ROOT, "data", "documents")  # Updated to match new structure
 REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports")
 
 # Ensure directories exist

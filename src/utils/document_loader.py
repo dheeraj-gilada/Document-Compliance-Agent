@@ -6,20 +6,25 @@ from typing import Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
-# Temporarily disable unstructured library due to compatibility issues
-UNSTRUCTURED_AVAILABLE = False
-logger.warning("Document processing temporarily disabled due to unstructured library compatibility issues")
-
-# Define dummy functions to prevent errors
-def partition_pdf(*args, **kwargs): return []
-def partition_text(*args, **kwargs): return []
-def partition_docx(*args, **kwargs): return []
-def partition_image(*args, **kwargs): return []
-Element = None
-Table = None
-
-# TODO: Re-enable unstructured library after resolving compatibility issues
-# The issue appears to be a bus error during import, likely related to binary dependencies
+# Try to import unstructured library
+try:
+    from unstructured.partition.pdf import partition_pdf
+    from unstructured.partition.text import partition_text
+    from unstructured.partition.docx import partition_docx
+    from unstructured.partition.image import partition_image
+    from unstructured.documents.elements import Element, Table
+    UNSTRUCTURED_AVAILABLE = True
+    logger.info("Unstructured library successfully imported and available")
+except ImportError as e:
+    logger.warning(f"Unstructured library not available: {e}")
+    UNSTRUCTURED_AVAILABLE = False
+    # Define dummy functions to prevent errors
+    def partition_pdf(*args, **kwargs): return []
+    def partition_text(*args, **kwargs): return []
+    def partition_docx(*args, **kwargs): return []
+    def partition_image(*args, **kwargs): return []
+    Element = None
+    Table = None
 
 # Import the classifier agent with error handling
 try:
@@ -30,6 +35,7 @@ except ImportError as e:
     CLASSIFIER_AVAILABLE = False
     class DocumentTypeClassifierAgent:
         async def infer_document_type(self, filename: str, text_sample: str) -> str:
+            logger.warning(f"DocumentTypeClassifierAgent not available due to import error. Defaulting doc_type to 'unknown' for {filename}.")
             return "unknown"
 
 class DocumentLoader:

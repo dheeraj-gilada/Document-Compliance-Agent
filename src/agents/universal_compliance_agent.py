@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Any, Dict, List
 from openai import AsyncOpenAI
 import os
@@ -109,11 +110,14 @@ You MUST output a SINGLE JSON object representing the compliance finding for the
         self.model_name = model_name
         self.temperature = temperature
 
+
+
     def _build_prompt_for_llm(
         self,
         all_documents_data: List[Dict[str, Any]], # Each dict: {"filename": str, "doc_type": str, "extracted_data": Dict}
         compliance_rules: str # A single string with all rules, numbered.
     ) -> str:
+        # Use full data for maximum accuracy (no compression)
         prompt_parts = ["Here is the data extracted from all documents in this transaction set:"]
         if not all_documents_data:
             prompt_parts.append("No documents were provided or no data was successfully extracted.")
@@ -123,8 +127,9 @@ You MUST output a SINGLE JSON object representing the compliance finding for the
                 prompt_parts.append(f"Filename: {doc_data.get('filename', 'Unknown Filename')}")
                 prompt_parts.append(f"Type: {doc_data.get('doc_type', 'Unknown Type')}")
                 prompt_parts.append("Extracted Data:")
+                # Use readable JSON formatting for maximum clarity
                 prompt_parts.append(json.dumps(doc_data.get('extracted_data', {}), indent=2))
-                prompt_parts.append("--- End of Document {i+1} ---")
+                prompt_parts.append("--- End of Document ---")
 
         prompt_parts.append("\nHere is the consolidated list of compliance rules you need to check against ALL the documents above:")
         prompt_parts.append(compliance_rules)
@@ -147,21 +152,24 @@ You MUST output a SINGLE JSON object representing the compliance finding for the
         Returns:
             A list of dictionaries, where each dictionary represents a compliance finding for a rule.
         """
+        start_time = time.time()
+        
         if not consolidated_rules.strip():
             logger.info("No compliance rules provided. Skipping compliance check.")
             return []
         
-        # Even if no documents, we might have rules that are 'not_applicable' universally
-        # However, if no docs, most rules become not_applicable. The LLM should handle this.
-        # if not all_documents_data:
-        #     logger.warning("No documents provided for compliance check, but rules exist.")
-            # Depending on desired behavior, could return findings indicating rules are N/A due to no docs.
-            # For now, let the LLM determine this based on the prompt.
-
+        # Parse rule count for logging
+        rule_count = len([line for line in consolidated_rules.strip().split('\n') if line.strip() and line.strip()[0].isdigit()])
+        
         user_prompt = self._build_prompt_for_llm(all_documents_data, consolidated_rules)
-        logger.debug(f"Universal compliance user prompt:\n{user_prompt}")
+        
+        # Token estimation (rough)
+        estimated_input_tokens = len(user_prompt.split()) + len(self.SYSTEM_PROMPT.split())
+        logger.info(f"🚀 BATCH COMPLIANCE: Processing {rule_count} rules against {len(all_documents_data)} documents")
+        logger.info(f"📊 Full data mode (maximum accuracy): ~{estimated_input_tokens} estimated tokens")
 
         try:
+            api_start = time.time()
             response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
@@ -171,6 +179,7 @@ You MUST output a SINGLE JSON object representing the compliance finding for the
                 temperature=self.temperature,
                 response_format={"type": "json_object"}, 
             )
+            api_duration = time.time() - api_start
             
             response_content = response.choices[0].message.content
             if response_content is None:
@@ -210,7 +219,17 @@ You MUST output a SINGLE JSON object representing the compliance finding for the
                 logger.error(f"LLM response was not a list or a dictionary: {type(parsed_response_outer)}")
                 raise ValueError("LLM response was not a list or a dictionary.")
 
-            logger.info(f"Universal compliance check successful using {self.model_name}. {len(findings)} findings generated.")
+            # Performance logging
+            total_duration = time.time() - start_time
+            actual_input_tokens = response.usage.prompt_tokens if response.usage else estimated_input_tokens
+            actual_output_tokens = response.usage.completion_tokens if response.usage else len(response_content.split())
+            
+            logger.info(f"✅ BATCH COMPLIANCE COMPLETED:")
+            logger.info(f"   📈 Performance: {total_duration:.2f}s total ({api_duration:.2f}s API)")
+            logger.info(f"   🎯 Rules processed: {len(findings)}/{rule_count}")
+            logger.info(f"   💰 Tokens: {actual_input_tokens} in, {actual_output_tokens} out")
+            logger.info(f"   ⚡ Speed: {len(findings)/total_duration:.1f} rules/second")
+            
             return findings
 
         except json.JSONDecodeError as e:

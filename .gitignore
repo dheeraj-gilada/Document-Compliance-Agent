@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.pyc
+doc_compliance_env/
+reports/
+extracted_data/
+.cache/
