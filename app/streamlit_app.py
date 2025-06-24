@@ -30,24 +30,32 @@ st.set_page_config(layout="wide", page_title="Intelligent Document Compliance Ag
 processing_function_imported = False
 import_error_message = ""
 try:
-    from main import extract_document_data, run_compliance_check
+    from main import run_document_processing, run_compliance_check  # LangGraph workflow functions
     processing_function_imported = True
 except ImportError as e:
     import_error_message = f"Critical Error: Could not import processing functions from main.py: {e}. Ensure main.py is in the correct path and all its dependencies are installed. The application cannot proceed."
     logger.error(import_error_message)
 
-async def dummy_extract_document_data(docs_dir):
-    logger.warning("Using dummy_extract_document_data")
+async def dummy_run_document_processing(docs_dir, rules_content=None):
+    logger.warning("Using dummy_run_document_processing")
     await asyncio.sleep(1)
-    return {"processed_documents": [], "error_messages": ["Document extraction function (dummy) not fully loaded"]}
+    return {
+        "processed_documents": [], 
+        "aggregated_compliance_findings": [],
+        "error_messages": ["Document processing function (dummy) not fully loaded"]
+    }
 
 async def dummy_run_compliance_check(extracted_documents, rules_content):
     logger.warning("Using dummy_run_compliance_check")
     await asyncio.sleep(1)
-    return {"processed_documents": extracted_documents, "aggregated_compliance_findings": [], "error_messages": ["Compliance check function (dummy) not fully loaded"]}
+    return {
+        "processed_documents": extracted_documents, 
+        "aggregated_compliance_findings": [],
+        "error_messages": ["Compliance check function (dummy) not fully loaded"]
+    }
 
 if not processing_function_imported:
-    extract_document_data = dummy_extract_document_data
+    run_document_processing = dummy_run_document_processing
     run_compliance_check = dummy_run_compliance_check
 
 def get_rules_representation(rules_list_data):
@@ -66,6 +74,13 @@ def main_app():
     if 'is_checking_compliance' not in st.session_state: st.session_state.is_checking_compliance = False
     if 'extracted_data_cache' not in st.session_state: st.session_state.extracted_data_cache = None
     if 'rules_cache' not in st.session_state: st.session_state.rules_cache = get_rules_representation([])
+    
+    # Initialize shared cache manager for consistent stats tracking
+    if 'cache_manager' not in st.session_state:
+        st.session_state.cache_manager = DocumentCacheManager()
+        # Store reference globally for workflow access
+        import src.utils.cache_manager as cache_module
+        cache_module._global_cache_manager = st.session_state.cache_manager
 
     st.title("Intelligent Document Compliance & Process Automation Agent")
 
@@ -111,24 +126,64 @@ def main_app():
         
         # Cache Statistics Section
         st.subheader("📊 Performance Cache")
+        
+        # Initialize session state for cache manager
+        if 'cache_manager' not in st.session_state:
+            st.session_state.cache_manager = DocumentCacheManager()
+        
         try:
-            cache_manager = DocumentCacheManager()
+            cache_manager = st.session_state.cache_manager
             cache_stats = cache_manager.get_cache_stats()
             
-            if cache_stats.get("total_cached_documents", 0) > 0:
+            # Real-time session stats
+            session_hits = cache_stats.get("session_cache_hits", 0)
+            session_misses = cache_stats.get("session_cache_misses", 0)
+            total_session_checks = session_hits + session_misses
+            hit_rate = cache_stats.get("cache_hit_rate", 0)
+            
+            if total_session_checks > 0 or cache_stats.get("total_cached_documents", 0) > 0:
+                # Session Performance
+                st.markdown("**Current Session:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Cache Hits", 
+                        session_hits,
+                        delta=f"{hit_rate}% hit rate" if total_session_checks > 0 else None
+                    )
+                with col2:
+                    st.metric("Cache Misses", session_misses)
+                with col3:
+                    time_saved = cache_stats.get("estimated_time_saved", 0)
+                    st.metric("Time Saved", f"{time_saved:.1f}s")
+                
+                # Overall Database Stats
+                st.markdown("**Database Stats:**")
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("Cached Docs", cache_stats.get("total_cached_documents", 0))
-                    st.metric("Time Saved", f"{cache_stats.get('total_processing_time_saved', 0):.1f}s")
-                with col2:
+                    st.metric("Total Cached", cache_stats.get("total_cached_documents", 0))
                     st.metric("Avg Processing", f"{cache_stats.get('average_processing_time', 0):.1f}s")
-                    st.metric("Cache Size", f"{cache_stats.get('database_size_mb', 0):.1f}MB")
+                with col2:
+                    st.metric("Total Time Saved", f"{cache_stats.get('total_processing_time_saved', 0):.1f}s")
+                    st.metric("Cache Size", f"{cache_stats.get('database_size_mb', 0):.2f}MB")
+                
+                # Performance indicator
+                if total_session_checks > 0:
+                    if hit_rate >= 80:
+                        st.success(f"🚀 Excellent cache performance! {hit_rate}% hit rate")
+                    elif hit_rate >= 50:
+                        st.info(f"⚡ Good cache performance: {hit_rate}% hit rate")
+                    elif hit_rate > 0:
+                        st.warning(f"📈 Building cache: {hit_rate}% hit rate")
+                    else:
+                        st.info("🔄 Processing new documents...")
                 
                 # Cache management buttons
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("🗑️ Clear Cache", disabled=ui_disabled, help="Clear all cached documents"):
                         cache_manager.clear_cache()
+                        cache_manager.reset_session_stats()
                         st.success("Cache cleared!")
                         st.rerun()
                 with col2:
@@ -140,7 +195,7 @@ def main_app():
                             st.info("No old entries to clear")
                         st.rerun()
             else:
-                st.info("No cached documents yet")
+                st.info("🎯 No cache activity yet. Upload documents to see performance metrics!")
                 
         except Exception as e:
             st.error(f"Cache error: {e}")
@@ -201,9 +256,18 @@ def main_app():
 
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    extracted_results = loop.run_until_complete(extract_document_data(st.session_state.temp_docs_dir))
+                    extracted_results = loop.run_until_complete(run_document_processing(st.session_state.temp_docs_dir))
                     st.session_state.extracted_data_cache = extracted_results
                     logger.info("Document extraction completed.")
+                    
+                    # Display cache performance summary
+                    cache_stats = st.session_state.cache_manager.get_cache_stats()
+                    hit_rate = cache_stats.get("cache_hit_rate", 0)
+                    time_saved = cache_stats.get("estimated_time_saved", 0)
+                    if time_saved > 0:
+                        st.success(f"⚡ Cache accelerated processing! Saved {time_saved:.1f}s ({hit_rate}% hit rate)")
+                    elif cache_stats.get("session_cache_misses", 0) > 0:
+                        st.info("📁 Documents processed and cached for future speed improvements")
 
                     extraction_errors = extracted_results.get("error_messages", [])
                     if extraction_errors:
