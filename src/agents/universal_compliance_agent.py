@@ -43,7 +43,9 @@ CRITICAL INSTRUCTIONS FOR RULE EVALUATION:
 2. Identify which documents and fields are relevant
 3. Extract the specific values needed
 4. Perform the logical/mathematical evaluation step-by-step
-5. Determine the final compliance status based on the TRUE/FALSE result
+5. **CRITICAL**: Determine the final compliance status using this EXACT mapping:
+   - If mathematical/logical evaluation = TRUE → status = "compliant"
+   - If mathematical/logical evaluation = FALSE → status = "non-compliant"
 
 📋 OUTPUT FORMAT:
 For each rule, output a JSON object with:
@@ -58,14 +60,26 @@ For each rule, output a JSON object with:
   * The specific values you found
   * The mathematical/logical operation performed
   * Why the result is compliant or non-compliant
+  * Show your mathematical work
 - "involved_documents": List of relevant document filenames
+
+🚨 CRITICAL STATUS ASSIGNMENT RULES:
+BEFORE you output your JSON, think through this checklist:
+
+1. Did I find the required values? (If NO → "error" or "not_applicable")
+2. Did I perform the mathematical/logical evaluation correctly?
+3. What was the TRUE/FALSE result of my evaluation?
+4. FINAL STATUS ASSIGNMENT:
+   - TRUE evaluation → "status": "compliant"
+   - FALSE evaluation → "status": "non-compliant"
 
 ✅ EXAMPLES OF CORRECT EVALUATION:
 
-Example 1 - Mathematical Comparison:
+Example 1 - Mathematical Comparison (CORRECT):
 Rule: "balance < total"
 Found: balance=1332.0, total=1564.0 in purchase_order.pdf
 Evaluation: 1332.0 < 1564.0 = TRUE
+SINCE TRUE → Status = "compliant"
 Result:
 {
   "rule_id": "1",
@@ -75,10 +89,11 @@ Result:
   "involved_documents": ["purchase_order.pdf"]
 }
 
-Example 2 - Failed Comparison:
+Example 2 - Failed Comparison (CORRECT):
 Rule: "amount > 1000"
 Found: amount=500 in invoice.pdf
 Evaluation: 500 > 1000 = FALSE
+SINCE FALSE → Status = "non-compliant"
 Result:
 {
   "rule_id": "2", 
@@ -90,10 +105,12 @@ Result:
 
 🚨 CRITICAL REMINDERS:
 - Always show your mathematical work in the details
-- TRUE evaluation = "compliant"
+- TRUE evaluation = "compliant" 
 - FALSE evaluation = "non-compliant"
 - Be precise with numerical comparisons
 - Double-check your logic before determining the final status
+- If you say "the rule is satisfied" in details, status MUST be "compliant"
+- If you say "the rule is violated" in details, status MUST be "non-compliant"
 
 Output ALL findings as a single JSON list containing one object per rule evaluated.
 """
@@ -241,6 +258,7 @@ You MUST output a SINGLE JSON object with this exact structure:
                 return [{"rule_id": "N/A", "rule_checked": "LLM Interaction Error", "status": "error", "details": "LLM returned no content.", "involved_documents": []}]
 
             logger.debug(f"Raw LLM response for universal compliance: {response_content}")
+            logger.info(f"🔍 DEBUG: Raw LLM JSON response: {response_content}")
             
             # Expecting the response to be a JSON object with a single key (e.g., "findings") containing the list,
             # or the list directly if the model is prompted well.
@@ -272,6 +290,10 @@ You MUST output a SINGLE JSON object with this exact structure:
             else:
                 logger.error(f"LLM response was not a list or a dictionary: {type(parsed_response_outer)}")
                 raise ValueError("LLM response was not a list or a dictionary.")
+
+            # Debug: Log each finding's status
+            for i, finding in enumerate(findings):
+                logger.info(f"🔍 DEBUG: Finding {i+1} - Rule ID: {finding.get('rule_id', 'unknown')}, Status: '{finding.get('status', 'MISSING')}'")
 
             # Performance logging
             total_duration = time.time() - start_time

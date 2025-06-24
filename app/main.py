@@ -195,9 +195,15 @@ async def run_compliance_check(extracted_documents: List[Dict[str, Any]], rules_
         # Process findings for Streamlit compatibility - add is_compliant field
         findings = initial_state.get("aggregated_compliance_findings", [])
         for finding in findings:
+            # Debug: Log the actual status value from LLM
+            actual_status = finding.get('status', 'MISSING_STATUS')
+            logger.info(f"🔍 DEBUG: Rule {finding.get('rule_id', 'unknown')} - LLM returned status: '{actual_status}'")
+            
             # Determine the boolean 'is_compliant' status for Streamlit compatibility
             is_compliant_bool = finding.get('status', '').lower() in ['pass', 'compliant']
             finding['is_compliant'] = is_compliant_bool
+            logger.info(f"🔍 DEBUG: Rule {finding.get('rule_id', 'unknown')} - is_compliant set to: {is_compliant_bool}")
+            
             # Ensure 'reason' field exists for Streamlit compatibility
             if 'reason' not in finding:
                 finding['reason'] = finding.get('details', 'No details provided.')
