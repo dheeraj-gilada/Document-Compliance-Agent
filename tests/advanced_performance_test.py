@@ -275,23 +275,4 @@ async def simulate_production_workload():
         logger.info(f"   🚀 Production speedup: {first_run_time/subsequent_avg:.1f}x")
         logger.info(f"   💰 Time saved per run: {first_run_time - subsequent_avg:.2f}s")
 
-if __name__ == "__main__":
-    async def main():
-        logger.info("🚀 Starting Advanced Performance Testing Suite")
-        
-        # Run comprehensive benchmark
-        benchmark_results = await comprehensive_performance_benchmark()
-        
-        # Run production simulation
-        logger.info("\n" + "=" * 80)
-        await simulate_production_workload()
-        
-        logger.info("\n🎉 All performance tests completed successfully!")
-        logger.info("🔧 Your system is now optimized with:")
-        logger.info("   • Parallel document processing")
-        logger.info("   • Batch compliance checking") 
-        logger.info("   • Intelligent document caching")
-        logger.info("   • Smart compliance result caching")
-        logger.info("   • Automatic cache invalidation")
-    
-    asyncio.run(main()) 
+# Entry point removed - use from within application or tests only 

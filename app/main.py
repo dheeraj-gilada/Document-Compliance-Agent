@@ -5,7 +5,6 @@ Main entry point for the application that orchestrates the document processing,
 instruction parsing, compliance checking, and report generation workflow.
 """
 import asyncio
-import argparse
 import json
 import logging
 import os
@@ -27,31 +26,35 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import utility modules
-from app.config import DOCS_DIR
 from src.workflows.document_processing_workflow import create_document_processing_graph, DocumentProcessingState
 
 
 def load_rules_from_file(filepath: str) -> Optional[str]:
-    """Loads consolidated rules from a file."""
-    if not filepath:
-        logger.warning("No rules file path provided.")
-        return None
+    """
+    Load compliance rules from a text file.
+    
+    Args:
+        filepath: Path to the rules file
+        
+    Returns:
+        String content of the rules file, or None if error
+    """
     try:
-        with open(filepath, 'r') as f_rules:
-            return f_rules.read()
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+        return content if content else None
     except FileNotFoundError:
-        logger.error(f"Rules file not found: {filepath}.")
+        logging.error(f"Rules file not found: {filepath}")
         return None
     except Exception as e:
-        logger.error(f"Error loading rules from {filepath}: {e}")
+        logging.error(f"Error reading rules file {filepath}: {e}")
         return None
 
 def ensure_dir_exists(filepath: str):
-    """Ensures the directory for the given filepath exists."""
+    """Create directory for filepath if it doesn't exist"""
     directory = os.path.dirname(filepath)
     if directory and not os.path.exists(directory):
         os.makedirs(directory)
-        logger.info(f"Created directory: {directory}")
 
 async def run_document_processing(docs_dir_to_process: str, consolidated_rules_input: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -195,14 +198,9 @@ async def run_compliance_check(extracted_documents: List[Dict[str, Any]], rules_
         # Process findings for Streamlit compatibility - add is_compliant field
         findings = initial_state.get("aggregated_compliance_findings", [])
         for finding in findings:
-            # Debug: Log the actual status value from LLM
-            actual_status = finding.get('status', 'MISSING_STATUS')
-            logger.info(f"🔍 DEBUG: Rule {finding.get('rule_id', 'unknown')} - LLM returned status: '{actual_status}'")
-            
             # Determine the boolean 'is_compliant' status for Streamlit compatibility
             is_compliant_bool = finding.get('status', '').lower() in ['pass', 'compliant']
             finding['is_compliant'] = is_compliant_bool
-            logger.info(f"🔍 DEBUG: Rule {finding.get('rule_id', 'unknown')} - is_compliant set to: {is_compliant_bool}")
             
             # Ensure 'reason' field exists for Streamlit compatibility
             if 'reason' not in finding:
@@ -232,115 +230,4 @@ async def run_compliance_check(extracted_documents: List[Dict[str, Any]], rules_
         }
 
 
-async def main():
-    parser = argparse.ArgumentParser(description="Intelligent Document Compliance & Process Automation Agent")
-    parser.add_argument("--docs_dir", type=str, default=DOCS_DIR, 
-                        help="Directory containing documents to process.")
-    parser.add_argument("--mode", type=str, choices=['extract', 'compliance', 'full'], default='full',
-                        help="Operation mode: 'extract' (only data extraction), 'compliance' (only compliance checks on existing data), 'full' (both).")
-    parser.add_argument("--extraction-output-file", type=str, 
-                        default=os.path.join("extracted_data", "all_extracted_data.json"), 
-                        help="File to save extracted document data.")
-    parser.add_argument("--extracted-data-input", type=str, 
-                        default=os.path.join("extracted_data", "all_extracted_data.json"), 
-                        help="File to load extracted document data from (for compliance mode).")
-    parser.add_argument("--compliance-output-file", type=str, 
-                        default=os.path.join("reports", "compliance_checks.json"), 
-                        help="File to save compliance findings.")
-    parser.add_argument("--rules-file", type=str, help="Path to the consolidated compliance rules file. Required for 'compliance' and 'full' modes.")
 
-    args = parser.parse_args()
-
-    if args.mode in ['compliance', 'full'] and not args.rules_file:
-        parser.error("--rules-file is required for 'compliance' and 'full' modes.")
-
-    try:
-        if args.mode == 'extract':
-            # Extract documents only using cached LangGraph
-            logger.info(f"Starting cached document extraction from: {args.docs_dir}")
-            result = await extract_document_data(args.docs_dir)
-            
-            processed_documents = result.get("processed_documents", [])
-            ensure_dir_exists(args.extraction_output_file)
-            with open(args.extraction_output_file, 'w') as f:
-                json.dump(processed_documents, f, indent=2)
-            logger.info(f"Extracted data for {len(processed_documents)} documents saved to {args.extraction_output_file}")
-            
-            # Log cache performance
-            cache_stats = result.get("cache_stats", {})
-            if cache_stats and cache_stats.get("cache_hit_rate", 0) > 0:
-                logger.info(f"🚀 Cache hit rate: {cache_stats['cache_hit_rate']:.1f}%")
-            
-        elif args.mode == 'compliance':
-            # Compliance checking on pre-extracted data using cached LangGraph
-            logger.info(f"Starting cached compliance check mode.")
-            
-            # Load pre-extracted documents
-            try:
-                with open(args.extracted_data_input, 'r') as f:
-                    processed_documents = json.load(f)
-                if not isinstance(processed_documents, list):
-                    logger.error(f"Data in {args.extracted_data_input} is not a list.")
-                    return
-                logger.info(f"Loaded {len(processed_documents)} processed documents from {args.extracted_data_input}.")
-            except (FileNotFoundError, json.JSONDecodeError) as e:
-                logger.error(f"Error loading extracted data: {e}")
-                return
-            
-            # Load rules
-            rules_content = load_rules_from_file(args.rules_file)
-            if not rules_content:
-                logger.error(f"Failed to load rules from {args.rules_file}")
-                return
-            
-            # Run compliance checks using cached LangGraph
-            result = await run_compliance_check(processed_documents, rules_content)
-            compliance_findings = result.get("aggregated_compliance_findings", [])
-            
-            # Save results
-            ensure_dir_exists(args.compliance_output_file)
-            with open(args.compliance_output_file, 'w') as f:
-                json.dump(compliance_findings, f, indent=2)
-            logger.info(f"Compliance findings saved to {args.compliance_output_file}")
-            
-            # Log cache performance
-            cache_stats = result.get("cache_stats", {})
-            if cache_stats.get("compliance_cache_hit"):
-                logger.info("✅ Used cached compliance results")
-            
-        elif args.mode == 'full':
-            # Full pipeline (extraction + compliance) using cached LangGraph
-            logger.info(f"Starting full cached document processing pipeline.")
-            
-            # Load rules
-            rules_content = load_rules_from_file(args.rules_file)
-            if not rules_content:
-                logger.error(f"Failed to load rules from {args.rules_file}")
-                return
-            
-            # Run full pipeline using cached LangGraph
-            result = await run_document_processing(args.docs_dir, rules_content)
-            
-            processed_documents = result.get("processed_documents", [])
-            compliance_findings = result.get("aggregated_compliance_findings", [])
-            
-            # Save extraction results
-            ensure_dir_exists(args.extraction_output_file)
-            with open(args.extraction_output_file, 'w') as f:
-                json.dump(processed_documents, f, indent=2)
-            logger.info(f"Extracted data for {len(processed_documents)} documents saved to {args.extraction_output_file}")
-            
-            # Save compliance results
-            ensure_dir_exists(args.compliance_output_file)
-            with open(args.compliance_output_file, 'w') as f:
-                json.dump(compliance_findings, f, indent=2)
-            logger.info(f"Compliance findings saved to {args.compliance_output_file}")
-
-        logger.info(f"Process completed for mode: {args.mode}.")
-        
-    except Exception as e:
-        logger.error(f"Error in main: {e}", exc_info=True)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

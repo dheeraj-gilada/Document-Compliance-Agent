@@ -218,6 +218,4 @@ async def main():
         print(f"❌ Cache test failed: {e}")
         sys.exit(1)
 
-if __name__ == "__main__":
-    # Run the async main function
-    asyncio.run(main()) 
+# Entry point removed - use from within application or tests only 

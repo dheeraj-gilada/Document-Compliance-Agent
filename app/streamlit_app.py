@@ -23,7 +23,7 @@ import sys
 if 'torch' in sys.modules:
     import torch
     if hasattr(torch, '_classes'):
-        torch._classes.__getattr__ = lambda self, attr: None
+        torch._classes.__getattr__ = lambda attr: None
 
 st.set_page_config(layout="wide", page_title="Intelligent Document Compliance Agent")
 
@@ -383,5 +383,5 @@ def cleanup_session_temp_dir():
         except Exception as e: logger.error(f"Error cleaning up temp directory {st.session_state.temp_docs_dir}: {e}")
 if processing_function_imported: atexit.register(cleanup_session_temp_dir)
 
-if __name__ == "__main__":
-    main_app()
+# Call the main app function
+main_app()

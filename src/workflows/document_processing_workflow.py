@@ -149,74 +149,7 @@ async def _process_single_document_with_cache(doc_path: str, cache_manager: Docu
 
     return doc_data_for_state
 
-# --- Original Helper (fallback for non-cached processing) ---
-async def _process_single_document(doc_path: str) -> Dict[str, Any]:
-    """Helper to load, classify, and extract data from a single document."""
-    doc_filename = os.path.basename(doc_path)
-    docs_dir = os.path.dirname(doc_path)
-    logger.info(f"[Parallel Worker] Starting processing for: {doc_filename}")
 
-    loader = DocumentLoader(docs_dir)
-
-    doc_data_for_state = {
-        "filename": doc_filename,
-        "path": doc_path,
-        "status": "initialization",
-        "doc_type": None,
-        "extracted_text_content": None, # Kept for potential debugging but can be removed from final state
-        "extracted_tables_html": [],
-        "extracted_data": None,
-        "error_message": None
-    }
-
-    try:
-        # --- Logic from former load_classify_document_node ---
-        loaded_info = await loader.load_document(doc_filename)
-
-        if not loaded_info or not loaded_info.get("text"):
-            doc_data_for_state["status"] = "error_loading_document"
-            doc_data_for_state["error_message"] = loaded_info.get("error_message", "Failed to load or extract text.")
-            logger.error(f"[Parallel Worker] Failed to load/extract text from {doc_filename}. Error: {doc_data_for_state['error_message']}")
-            return doc_data_for_state # Stop processing this doc
-
-        doc_data_for_state["doc_type"] = loaded_info.get("doc_type", "unknown")
-        doc_data_for_state["extracted_text_content"] = loaded_info.get("text")
-        doc_data_for_state["extracted_tables_html"] = loaded_info.get("tables_html", [])
-        doc_data_for_state["status"] = "classified"
-        logger.info(f"[Parallel Worker] Document {doc_filename} classified. Type: {doc_data_for_state['doc_type']}.")
-
-        # --- Logic from former extract_document_data_node ---
-        text_content = doc_data_for_state.get("extracted_text_content", "")
-        tables_html_list = doc_data_for_state.get("extracted_tables_html", [])
-        combined_tables_html = "\n\n".join(tables_html_list)
-
-        if not text_content and not combined_tables_html:
-            doc_data_for_state["status"] = "skipped_extraction_no_content"
-            logger.warning(f"[Parallel Worker] No text/tables for {doc_filename}. Skipping data extraction.")
-            return doc_data_for_state
-
-        data_extractor_agent = StructuredDataExtractorAgent()
-        logger.info(f"[Parallel Worker] Extracting structured data from: {doc_filename}")
-        extracted_data = await data_extractor_agent.extract_structured_data(
-            doc_type=doc_data_for_state["doc_type"],
-            text_content=text_content,
-            combined_tables_html=combined_tables_html,
-            filename=doc_filename
-        )
-        doc_data_for_state["extracted_data"] = extracted_data
-        doc_data_for_state["status"] = "data_extracted"
-        logger.info(f"[Parallel Worker] Structured data extracted for {doc_filename}.")
-
-    except FileNotFoundError as e:
-        logger.error(f"[Parallel Worker] File not found for {doc_filename}: {e}", exc_info=True)
-        doc_data_for_state["status"] = "error_file_not_found"
-        doc_data_for_state["error_message"] = str(e)
-    except Exception as e:
-        logger.error(f"[Parallel Worker] Unhandled error processing {doc_filename}: {e}", exc_info=True)
-        doc_data_for_state["status"] = "error_processing"
-        doc_data_for_state["error_message"] = str(e)
-
-    return doc_data_for_state
 
 # --- Node Functions (Revised for Parallel Processing with Caching) ---
 
@@ -573,6 +506,4 @@ async def example_run():
             print(f"  - {err}")
     return final_state
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    asyncio.run(example_run())
+

@@ -14,164 +14,105 @@ class UniversalComplianceAgent:
     """
 
     SYSTEM_PROMPT = """
-You are an expert AI assistant specialized in document compliance verification with strong logical and mathematical reasoning capabilities.
+You are a document compliance verification assistant. You evaluate compliance rules against document data.
 
-You will be given:
-1. A list of documents with their extracted structured data
-2. A consolidated list of compliance rules to evaluate
+## Input
+You receive:
+1. Documents with extracted structured data
+2. Compliance rules to evaluate
 
-CRITICAL INSTRUCTIONS FOR RULE EVALUATION:
+## Evaluation Process
 
-🔍 MATHEMATICAL AND LOGICAL OPERATIONS:
-- For comparison operators (<, >, <=, >=, =, !=):
-  * CAREFULLY evaluate the mathematical relationship
-  * Example: "balance < total" with balance=1332.0 and total=1564.0
-  * Evaluation: 1332.0 < 1564.0 = TRUE → Status: "compliant"
-  * Example: "amount > 1000" with amount=500
-  * Evaluation: 500 > 1000 = FALSE → Status: "non-compliant"
+### Step 1: Parse the Rule
+Identify the operation type:
+- Comparison: <, >, <=, >=, =, !=
+- Existence: field must be present/not empty
+- Matching: field1 must equal field2
 
-- For existence checks:
-  * "field must be present" → Check if field exists and has a non-empty value
-  * "field must not be empty" → Check if field has meaningful content
+### Step 2: Extract Values
+Find the required values from the documents.
 
-- For matching rules:
-  * "field1 must equal field2" → Compare exact values
-  * Use string matching for text, numerical comparison for numbers
+### Step 3: Evaluate
+Perform the logical/mathematical operation.
 
-🎯 EVALUATION PROCESS:
-1. Parse the rule to understand what it's checking
-2. Identify which documents and fields are relevant
-3. Extract the specific values needed
-4. Perform the logical/mathematical evaluation step-by-step
-5. **CRITICAL**: Determine the final compliance status using this EXACT mapping:
-   - If mathematical/logical evaluation = TRUE → status = "compliant"
-   - If mathematical/logical evaluation = FALSE → status = "non-compliant"
+### Step 4: Determine Status
+- If evaluation is TRUE → status = "compliant"
+- If evaluation is FALSE → status = "non-compliant"
+- If required data missing → status = "error"
+- If rule doesn't apply → status = "not_applicable"
 
-📋 OUTPUT FORMAT:
-For each rule, output a JSON object with:
-- "rule_id": The rule number (e.g., "1", "2")
-- "rule_checked": The exact rule text
-- "status": Must be one of:
-  * "compliant" - Rule condition is satisfied (TRUE)
-  * "non-compliant" - Rule condition is violated (FALSE)
-  * "not_applicable" - Rule doesn't apply to available documents
-  * "error" - Cannot evaluate due to missing data or other issues
-- "details": Clear explanation of your evaluation including:
-  * The specific values you found
-  * The mathematical/logical operation performed
-  * Why the result is compliant or non-compliant
-  * Show your mathematical work
-- "involved_documents": List of relevant document filenames
+## Output Format
+Return a JSON array with one object per rule:
 
-🚨 CRITICAL STATUS ASSIGNMENT RULES:
-BEFORE you output your JSON, think through this checklist:
+{
+  "rule_id": "string",
+  "rule_checked": "string",
+  "status": "compliant|non-compliant|not_applicable|error",
+  "details": "string with evaluation steps and values",
+  "involved_documents": ["array of filenames"]
+}
 
-1. Did I find the required values? (If NO → "error" or "not_applicable")
-2. Did I perform the mathematical/logical evaluation correctly?
-3. What was the TRUE/FALSE result of my evaluation?
-4. FINAL STATUS ASSIGNMENT:
-   - TRUE evaluation → "status": "compliant"
-   - FALSE evaluation → "status": "non-compliant"
+## Examples
 
-✅ EXAMPLES OF CORRECT EVALUATION:
-
-Example 1 - Mathematical Comparison (CORRECT):
+### Example 1: Mathematical Comparison (Compliant)
 Rule: "balance < total"
-Found: balance=1332.0, total=1564.0 in purchase_order.pdf
+Data: balance=1332.0, total=1564.0 (from purchase_order.pdf)
 Evaluation: 1332.0 < 1564.0 = TRUE
-SINCE TRUE → Status = "compliant"
-Result:
+Output:
 {
   "rule_id": "1",
   "rule_checked": "balance < total",
   "status": "compliant",
-  "details": "Found balance=1332.0 and total=1564.0 in purchase_order.pdf. Mathematical evaluation: 1332.0 < 1564.0 = TRUE, therefore the rule is satisfied.",
+  "details": "In purchase_order.pdf: balance=1332.0, total=1564.0. Evaluation: 1332.0 < 1564.0 = TRUE.",
   "involved_documents": ["purchase_order.pdf"]
 }
 
-Example 2 - Failed Comparison (CORRECT):
+### Example 2: Failed Comparison (Non-compliant)
 Rule: "amount > 1000"
-Found: amount=500 in invoice.pdf
+Data: amount=500 (from invoice.pdf)
 Evaluation: 500 > 1000 = FALSE
-SINCE FALSE → Status = "non-compliant"
-Result:
+Output:
 {
-  "rule_id": "2", 
+  "rule_id": "2",
   "rule_checked": "amount > 1000",
   "status": "non-compliant",
-  "details": "Found amount=500 in invoice.pdf. Mathematical evaluation: 500 > 1000 = FALSE, therefore the rule is violated.",
+  "details": "In invoice.pdf: amount=500. Evaluation: 500 > 1000 = FALSE.",
   "involved_documents": ["invoice.pdf"]
 }
 
-🚨 CRITICAL REMINDERS:
-- Always show your mathematical work in the details
-- TRUE evaluation = "compliant" 
-- FALSE evaluation = "non-compliant"
-- Be precise with numerical comparisons
-- Double-check your logic before determining the final status
-- If you say "the rule is satisfied" in details, status MUST be "compliant"
-- If you say "the rule is violated" in details, status MUST be "non-compliant"
-
-Output ALL findings as a single JSON list containing one object per rule evaluated.
-"""
-
-    SINGLE_RULE_SYSTEM_PROMPT = """
-You are an expert Universal Compliance Agent with strong mathematical and logical reasoning capabilities.
-
-Your task is to evaluate a SINGLE compliance rule against a provided set of documents.
-
-**Input:**
-1. **Rule ID:** The identifier of the rule (e.g., "1", "2")
-2. **Rule Text:** The specific compliance rule text to evaluate
-3. **Documents Data:** List of documents with extracted structured data
-
-**CRITICAL EVALUATION INSTRUCTIONS:**
-
-🔍 MATHEMATICAL AND LOGICAL OPERATIONS:
-- For comparison operators (<, >, <=, >=, =, !=):
-  * CAREFULLY evaluate the mathematical relationship
-  * Example: "balance < total" with balance=1332.0 and total=1564.0
-  * Evaluation: 1332.0 < 1564.0 = TRUE → Status: "compliant"
-  * Always show your mathematical work in the details
-
-- For existence checks:
-  * "field must be present" → Check if field exists and has a non-empty value
-  * "field must not be empty" → Check if field has meaningful content
-
-🎯 EVALUATION PROCESS:
-1. Parse the rule to understand what it's checking
-2. Identify which documents and fields are relevant
-3. Extract the specific values needed
-4. Perform the logical/mathematical evaluation step-by-step
-5. Determine compliance status: TRUE = "compliant", FALSE = "non-compliant"
-
-**Output Format:**
-You MUST output a SINGLE JSON object with this exact structure:
+### Example 3: Missing Data (Error)
+Rule: "tax_rate <= 0.15"
+Data: tax_rate field not found
+Output:
 {
-    "rule_id": "<The Rule ID provided>",
-    "rule_checked": "<The Rule Text provided>",
-    "status": "compliant" | "non-compliant" | "not_applicable" | "error",
-    "details": "<Clear explanation including:
-                 - The specific values you found
-                 - The mathematical/logical operation performed  
-                 - Why the result is compliant or non-compliant
-                 - Show your mathematical work>",
-    "involved_documents": ["<filename1.pdf>", "<filename2.pdf>"]
+  "rule_id": "3",
+  "rule_checked": "tax_rate <= 0.15",
+  "status": "error",
+  "details": "Could not find 'tax_rate' field in any document.",
+  "involved_documents": []
 }
 
-**Status Guidelines:**
-- "compliant": Rule condition is satisfied (TRUE)
-- "non-compliant": Rule condition is violated (FALSE)  
-- "not_applicable": Rule doesn't apply to available documents
-- "error": Cannot evaluate due to missing data or other issues
+### Example 4: Cross-document Rule
+Rule: "invoice.amount = purchase_order.total"
+Data: invoice.amount=1564.0, purchase_order.total=1564.0
+Evaluation: 1564.0 = 1564.0 = TRUE
+Output:
+{
+  "rule_id": "4",
+  "rule_checked": "invoice.amount = purchase_order.total",
+  "status": "compliant",
+  "details": "invoice.pdf: amount=1564.0, purchase_order.pdf: total=1564.0. Evaluation: 1564.0 = 1564.0 = TRUE.",
+  "involved_documents": ["invoice.pdf", "purchase_order.pdf"]
+}
 
-**Critical Reminders:**
-- Always show mathematical work: "1332.0 < 1564.0 = TRUE"
-- TRUE evaluation = "compliant"
-- FALSE evaluation = "non-compliant"
-- Be precise with numerical comparisons
-- Include specific values in your details
+## Important Notes
+- Always show the mathematical work in details
+- Be consistent: TRUE = compliant, FALSE = non-compliant
+- Handle numeric comparisons precisely
+- Return ALL rules as a single JSON array
 """
+
+
 
     def __init__(self, model_name: str = "gpt-4o-mini", temperature: float = 0.0):
         # Using temperature 0.0 for more deterministic compliance checks
@@ -258,7 +199,6 @@ You MUST output a SINGLE JSON object with this exact structure:
                 return [{"rule_id": "N/A", "rule_checked": "LLM Interaction Error", "status": "error", "details": "LLM returned no content.", "involved_documents": []}]
 
             logger.debug(f"Raw LLM response for universal compliance: {response_content}")
-            logger.info(f"🔍 DEBUG: Raw LLM JSON response: {response_content}")
             
             # Expecting the response to be a JSON object with a single key (e.g., "findings") containing the list,
             # or the list directly if the model is prompted well.
@@ -291,10 +231,6 @@ You MUST output a SINGLE JSON object with this exact structure:
                 logger.error(f"LLM response was not a list or a dictionary: {type(parsed_response_outer)}")
                 raise ValueError("LLM response was not a list or a dictionary.")
 
-            # Debug: Log each finding's status
-            for i, finding in enumerate(findings):
-                logger.info(f"🔍 DEBUG: Finding {i+1} - Rule ID: {finding.get('rule_id', 'unknown')}, Status: '{finding.get('status', 'MISSING')}'")
-
             # Performance logging
             total_duration = time.time() - start_time
             actual_input_tokens = response.usage.prompt_tokens if response.usage else estimated_input_tokens
@@ -316,81 +252,4 @@ You MUST output a SINGLE JSON object with this exact structure:
             logger.error(f"Error during universal compliance check with LLM: {e}", exc_info=True)
             return [{"rule_id": "N/A", "rule_checked": "LLM Interaction Error", "status": "error", "details": f"An unexpected error occurred: {e}", "involved_documents": []}]
 
-    async def evaluate_single_rule(self, rule_id: str, rule_text: str, all_documents_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Evaluates a single compliance rule against all provided document data."""
-        logger.info(f"Evaluating single rule ID: {rule_id} - '{rule_text}' against {len(all_documents_data)} documents.")
 
-        # Prepare the content for the LLM
-        # We need to present the documents in a way the LLM can understand within the prompt context.
-        # Let's serialize the document data to a compact JSON string for inclusion.
-        documents_json_str = json.dumps(all_documents_data, indent=2)
-
-        prompt_messages = [
-            {"role": "system", "content": self.SINGLE_RULE_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Here is the rule and the documents data:\n\n**Rule ID:** {rule_id}\n\n**Rule Text:** {rule_text}\n\n**Documents Data (JSON format):**\n```json\n{documents_json_str}\n```\n\nPlease evaluate this rule and provide the compliance finding in the specified JSON format."}
-        ]
-
-        default_error_finding = {
-            "rule_id": rule_id,
-            "rule_checked": rule_text,
-            "status": "error",
-            "details": "LLM processing failed or produced invalid JSON for this rule.",
-            "involved_documents": [doc.get('filename', 'unknown_file') for doc in all_documents_data]
-        }
-
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model_name,
-                messages=prompt_messages,
-                temperature=self.temperature,
-                response_format={"type": "json_object"}, 
-            )
-            
-            response_content = response.choices[0].message.content
-            if response_content is None:
-                logger.error(f"LLM returned empty response for rule ID: {rule_id}.")
-                return default_error_finding
-
-            # Attempt to parse the JSON response
-            # The LLM should return a single JSON object as per the prompt.
-            # Remove potential markdown backticks if present
-            if response_content.startswith("```json"): 
-                response_content = response_content[7:] 
-                if response_content.endswith("```"): 
-                    response_content = response_content[:-3] 
-            
-            response_content = response_content.strip() 
-            
-            # Ensure the response is not empty before trying to parse
-            if not response_content:
-                logger.error(f"LLM returned empty response for rule ID: {rule_id}.")
-                return default_error_finding
-
-            parsed_finding = json.loads(response_content) 
-            
-            # Basic validation of the parsed structure (can be more detailed)
-            if not all(key in parsed_finding for key in ["rule_id", "status", "details", "involved_documents"]):
-                logger.error(f"LLM response for rule ID {rule_id} is missing required keys. Response: {parsed_finding}")
-                # Augment with what was expected vs received if possible
-                parsed_finding['details'] = f"Error: LLM response structure incorrect. Original details: {parsed_finding.get('details', '')}"
-                parsed_finding['status'] = 'error'
-                # Ensure all keys exist even if some are defaulted
-                parsed_finding = {**default_error_finding, **parsed_finding, "rule_id": rule_id, "rule_checked": rule_text} 
-
-            logger.info(f"Successfully evaluated rule ID: {rule_id}. Status: {parsed_finding.get('status')}")
-            return parsed_finding
-        
-        except json.JSONDecodeError as e:
-            logger.error(f"JSONDecodeError for rule ID {rule_id}: {e}. LLM Response: {response_content[:500]}") 
-            # Return a structured error, but try to include the problematic response snippet if it's useful
-            error_details = f"LLM response was not valid JSON. Error: {e}. Response snippet: {response_content[:200]}" 
-            return {
-                "rule_id": rule_id,
-                "rule_checked": rule_text,
-                "status": "error",
-                "details": error_details,
-                "involved_documents": [doc.get('filename', 'unknown_file') for doc in all_documents_data]
-            }
-        except Exception as e:
-            logger.error(f"Unexpected error evaluating rule ID {rule_id}: {e}", exc_info=True)
-            return default_error_finding

@@ -292,5 +292,4 @@ def main():
         st.success("Demo files cleaned up!")
         st.rerun()
 
-if __name__ == "__main__":
-    main() 
+# Entry point removed - use from within application or tests only 

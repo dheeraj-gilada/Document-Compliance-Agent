@@ -128,10 +128,4 @@ def migrate_all_cache_databases(cache_dir: str = ".cache"):
     
     logger.info("All cache database migrations completed")
 
-if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(level=logging.INFO)
-    
-    # Run migrations
-    migrate_all_cache_databases()
-    print("✅ Database migrations completed successfully!") 
+# Entry point removed - use from within application or tests only 

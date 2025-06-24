@@ -6,3 +6,4 @@ reports/
 extracted_data/
 .cache/
 .env
+tests/
