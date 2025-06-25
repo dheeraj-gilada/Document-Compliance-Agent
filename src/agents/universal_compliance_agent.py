@@ -4,6 +4,9 @@ from typing import Any, Dict, List
 from openai import AsyncOpenAI
 import os
 import logging
+import instructor
+
+from src.models import ComplianceResults, ComplianceFinding, ComplianceStatus, RuleEvaluation
 
 logger = logging.getLogger(__name__)
 
@@ -14,111 +17,105 @@ class UniversalComplianceAgent:
     """
 
     SYSTEM_PROMPT = """
-You are a document compliance verification assistant. You evaluate compliance rules against document data.
+You are an expert document compliance verification assistant. Your role is to systematically evaluate compliance rules against document data with precision and clarity.
 
-## Input
-You receive:
-1. Documents with extracted structured data
-2. Compliance rules to evaluate
+## Core Responsibilities
 
-## Evaluation Process
+### 1. Rule Analysis & Classification
+For each rule, identify:
+- **Operation Type**: Mathematical comparison, field existence, cross-document validation, pattern matching
+- **Required Fields**: Which data fields need to be extracted from which documents
+- **Evaluation Logic**: The specific comparison or check to be performed
 
-### Step 1: Parse the Rule
-Identify the operation type:
-- Comparison: <, >, <=, >=, =, !=
-- Existence: field must be present/not empty
-- Matching: field1 must equal field2
+### 2. Data Extraction & Validation
+- Locate required values across all provided documents
+- Handle different data types (numbers, strings, dates, booleans)
+- Account for field variations and synonyms (e.g., "total", "amount", "sum")
+- Consider document type context (invoice vs purchase order vs delivery note)
 
-### Step 2: Extract Values
-Find the required values from the documents.
+### 3. Precise Evaluation
+- Perform exact mathematical comparisons with proper precision
+- Handle edge cases (null values, missing fields, zero values)
+- Apply logical operations consistently
+- Document the step-by-step evaluation process
 
-### Step 3: Evaluate
-Perform the logical/mathematical operation.
+### 4. Status Determination Rules
+- **COMPLIANT**: Rule evaluation returns TRUE, all required data present and valid
+- **NON_COMPLIANT**: Rule evaluation returns FALSE, data present but fails check
+- **ERROR**: Missing required data, invalid data types, or evaluation cannot be performed
+- **NOT_APPLICABLE**: Rule doesn't apply to the available document types or context
 
-### Step 4: Determine Status
-- If evaluation is TRUE → status = "compliant"
-- If evaluation is FALSE → status = "non-compliant"
-- If required data missing → status = "error"
-- If rule doesn't apply → status = "not_applicable"
+## Evaluation Methodology
 
-## Output Format
-Return a JSON array with one object per rule:
+### Mathematical Comparisons
+- Extract numerical values with proper type conversion
+- Handle currency symbols, thousands separators, and decimal places
+- Show exact values and calculations: "1,332.50 < 1,564.00 = TRUE"
+- Account for floating-point precision in comparisons
 
-{
-  "rule_id": "string",
-  "rule_checked": "string",
-  "status": "compliant|non-compliant|not_applicable|error",
-  "details": "string with evaluation steps and values",
-  "involved_documents": ["array of filenames"]
-}
+### Field Existence Checks
+- Verify field presence and non-empty values
+- Distinguish between null, empty string, and zero values
+- Consider field variations across document types
 
-## Examples
+### Cross-Document Validation
+- Match corresponding fields across multiple documents
+- Handle document type relationships (invoice → purchase order → delivery note)
+- Verify data consistency and logical relationships
 
-### Example 1: Mathematical Comparison (Compliant)
-Rule: "balance < total"
-Data: balance=1332.0, total=1564.0 (from purchase_order.pdf)
-Evaluation: 1332.0 < 1564.0 = TRUE
-Output:
-{
-  "rule_id": "1",
-  "rule_checked": "balance < total",
-  "status": "compliant",
-  "details": "In purchase_order.pdf: balance=1332.0, total=1564.0. Evaluation: 1332.0 < 1564.0 = TRUE.",
-  "involved_documents": ["purchase_order.pdf"]
-}
+### Pattern Matching & Business Rules
+- Apply domain-specific validation logic
+- Check format compliance (dates, IDs, reference numbers)
+- Validate business rule consistency
 
-### Example 2: Failed Comparison (Non-compliant)
-Rule: "amount > 1000"
-Data: amount=500 (from invoice.pdf)
-Evaluation: 500 > 1000 = FALSE
-Output:
-{
-  "rule_id": "2",
-  "rule_checked": "amount > 1000",
-  "status": "non-compliant",
-  "details": "In invoice.pdf: amount=500. Evaluation: 500 > 1000 = FALSE.",
-  "involved_documents": ["invoice.pdf"]
-}
+## Quality Standards
 
-### Example 3: Missing Data (Error)
-Rule: "tax_rate <= 0.15"
-Data: tax_rate field not found
-Output:
-{
-  "rule_id": "3",
-  "rule_checked": "tax_rate <= 0.15",
-  "status": "error",
-  "details": "Could not find 'tax_rate' field in any document.",
-  "involved_documents": []
-}
+### Details Field Requirements
+- Start with document context: "In [filename]: [field]=[value]"
+- Show mathematical work: "Evaluation: [value1] [operator] [value2] = [TRUE/FALSE]"
+- Explain reasoning for complex rules
+- Include all relevant document references
 
-### Example 4: Cross-document Rule
-Rule: "invoice.amount = purchase_order.total"
-Data: invoice.amount=1564.0, purchase_order.total=1564.0
-Evaluation: 1564.0 = 1564.0 = TRUE
-Output:
-{
-  "rule_id": "4",
-  "rule_checked": "invoice.amount = purchase_order.total",
-  "status": "compliant",
-  "details": "invoice.pdf: amount=1564.0, purchase_order.pdf: total=1564.0. Evaluation: 1564.0 = 1564.0 = TRUE.",
-  "involved_documents": ["invoice.pdf", "purchase_order.pdf"]
-}
+### Involved Documents
+- List ALL documents that contributed data to the evaluation
+- Use exact filenames as provided
+- Include documents even if they contained no relevant data (for transparency)
 
-## Important Notes
-- Always show the mathematical work in details
-- Be consistent: TRUE = compliant, FALSE = non-compliant
-- Handle numeric comparisons precisely
-- Return ALL rules as a single JSON array
+### Rule ID Assignment
+- Use sequential numbering: "1", "2", "3", etc.
+- Match the order of rules as presented
+- Maintain consistency across the evaluation batch
+
+## Expert Tips for Accuracy
+
+1. **Double-check numerical comparisons**: Ensure proper type conversion and precision
+2. **Consider business context**: Invoice totals should match purchase order amounts
+3. **Handle synonyms**: "total", "amount", "sum", "value" may refer to the same concept
+4. **Document relationships**: Understand how different document types relate to each other
+5. **Error classification**: Distinguish between missing data vs. failed validation
+
+## Response Quality
+Your structured output will be automatically validated. Focus on:
+- Accurate rule interpretation and evaluation
+- Clear, detailed explanations of your reasoning
+- Precise numerical calculations
+- Comprehensive document analysis
+- Consistent status assignment based on evaluation results
+
+Remember: You are the expert ensuring financial and regulatory compliance. Accuracy and thoroughness are paramount.
 """
 
 
 
     def __init__(self, model_name: str = "gpt-4o-mini", temperature: float = 0.0):
         # Using temperature 0.0 for more deterministic compliance checks
-        self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        if not self.client.api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable not set.")
+        
+        # Create instructor-patched client (modern approach)
+        self.client = instructor.patch(AsyncOpenAI(api_key=api_key))
+        
         self.model_name = model_name
         self.temperature = temperature
 
@@ -155,6 +152,7 @@ Output:
     ) -> List[Dict[str, Any]]:
         """
         Checks all compliance rules (single and cross-document) against the batch of documents.
+        Now uses instructor for structured output with improved accuracy.
 
         Args:
             all_documents_data: A list of dictionaries, where each dictionary contains
@@ -177,79 +175,176 @@ Output:
         
         # Token estimation (rough)
         estimated_input_tokens = len(user_prompt.split()) + len(self.SYSTEM_PROMPT.split())
-        logger.info(f"🚀 BATCH COMPLIANCE: Processing {rule_count} rules against {len(all_documents_data)} documents")
-        logger.info(f"📊 Full data mode (maximum accuracy): ~{estimated_input_tokens} estimated tokens")
+        logger.info(f"🚀 INSTRUCTOR COMPLIANCE: Processing {rule_count} rules against {len(all_documents_data)} documents")
+        logger.info(f"📊 Structured output mode with validation: ~{estimated_input_tokens} estimated tokens")
 
         try:
             api_start = time.time()
-            response = await self.client.chat.completions.create(
+            
+            # Use instructor for structured output with validation
+            compliance_results = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=self.temperature,
-                response_format={"type": "json_object"}, 
+                response_model=ComplianceResults,
+                max_retries=2  # Instructor will retry if validation fails
             )
+            
             api_duration = time.time() - api_start
             
-            response_content = response.choices[0].message.content
-            if response_content is None:
-                logger.error("LLM response content is None for universal compliance.")
-                return [{"rule_id": "N/A", "rule_checked": "LLM Interaction Error", "status": "error", "details": "LLM returned no content.", "involved_documents": []}]
+            if compliance_results is None:
+                logger.error("Instructor returned None for compliance results.")
+                return [{"rule_id": "N/A", "rule_checked": "Instructor Error", "status": "error", "details": "Instructor returned no results.", "involved_documents": []}]
 
-            logger.debug(f"Raw LLM response for universal compliance: {response_content}")
-            
-            # Expecting the response to be a JSON object with a single key (e.g., "findings") containing the list,
-            # or the list directly if the model is prompted well.
-            # The system prompt asks for "Output ALL your findings as a single JSON list."
-            # Let's assume the model returns a JSON object like: {"compliance_findings": [...list...]}
-            # and we will parse that key.
-            parsed_response_outer = json.loads(response_content)
-            
+            # Extract findings and convert to dictionaries for backward compatibility
             findings = []
-            if isinstance(parsed_response_outer, list):
-                findings = parsed_response_outer # Model directly returned a list
-            elif isinstance(parsed_response_outer, dict):
-                # Try to find a key that holds the list of findings
-                # Common keys could be 'findings', 'compliance_findings', 'results'
-                potential_keys = ['findings', 'compliance_findings', 'results', 'all_compliance_findings']
-                found_key = False
-                for key in potential_keys:
-                    if key in parsed_response_outer and isinstance(parsed_response_outer[key], list):
-                        findings = parsed_response_outer[key]
-                        found_key = True
-                        break
-                if not found_key:
-                    # If it's a dict but no known key contains a list, or only one key and its value is a list
-                    if len(parsed_response_outer) == 1 and isinstance(list(parsed_response_outer.values())[0], list):
-                        findings = list(parsed_response_outer.values())[0]
-                    else:
-                        logger.error(f"Unexpected JSON structure from LLM. Expected a list of findings or a dict with a key containing a list. Got: {parsed_response_outer}")
-                        raise ValueError("Unexpected JSON structure from LLM for compliance findings.")
-            else:
-                logger.error(f"LLM response was not a list or a dictionary: {type(parsed_response_outer)}")
-                raise ValueError("LLM response was not a list or a dictionary.")
+            for finding in compliance_results.findings:
+                # Convert Pydantic model to dictionary format expected by the workflow
+                finding_dict = {
+                    "rule_id": finding.rule_id,
+                    "rule_checked": finding.rule_checked,
+                    "status": finding.status.value,  # Convert enum to string
+                    "details": finding.details,
+                    "involved_documents": finding.involved_documents,
+                    "is_compliant": finding.is_compliant,
+                    "reason": finding.reason or finding.details
+                }
+                
+                # Handle legacy field name mapping
+                if "rule_text" not in finding_dict:
+                    finding_dict["rule_text"] = finding.rule_checked
+                    
+                findings.append(finding_dict)
 
-            # Performance logging
+            # Performance logging with structured output metrics
             total_duration = time.time() - start_time
-            actual_input_tokens = response.usage.prompt_tokens if response.usage else estimated_input_tokens
-            actual_output_tokens = response.usage.completion_tokens if response.usage else len(response_content.split())
             
-            logger.info(f"✅ BATCH COMPLIANCE COMPLETED:")
+            # Get token usage if available (instructor preserves this)
+            usage_info = getattr(compliance_results, '_raw_response', None)
+            if usage_info and hasattr(usage_info, 'usage'):
+                actual_input_tokens = usage_info.usage.prompt_tokens
+                actual_output_tokens = usage_info.usage.completion_tokens
+            else:
+                actual_input_tokens = estimated_input_tokens
+                actual_output_tokens = len(str(compliance_results).split())
+            
+            logger.info(f"✅ INSTRUCTOR COMPLIANCE COMPLETED:")
             logger.info(f"   📈 Performance: {total_duration:.2f}s total ({api_duration:.2f}s API)")
             logger.info(f"   🎯 Rules processed: {len(findings)}/{rule_count}")
             logger.info(f"   💰 Tokens: {actual_input_tokens} in, {actual_output_tokens} out")
             logger.info(f"   ⚡ Speed: {len(findings)/total_duration:.1f} rules/second")
+            logger.info(f"   🔧 Validation: Automatic type checking and field validation applied")
+            
+            # Log summary statistics
+            summary = compliance_results.get_summary()
+            logger.info(f"   📊 Summary: {summary['compliant']}/{summary['total_rules']} compliant ({summary['compliance_rate']:.1f}%)")
             
             return findings
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON response from LLM for universal compliance: {e}")
-            logger.error(f"LLM Raw Response (check for malformed JSON or non-JSON output): {response_content if 'response_content' in locals() else 'response_content not captured'}")
-            return [{"rule_id": "N/A", "rule_checked": "JSON Parsing Error", "status": "error", "details": f"Could not parse LLM response: {e}. Response: {response_content if 'response_content' in locals() else 'not captured'}", "involved_documents": []}]
         except Exception as e:
-            logger.error(f"Error during universal compliance check with LLM: {e}", exc_info=True)
-            return [{"rule_id": "N/A", "rule_checked": "LLM Interaction Error", "status": "error", "details": f"An unexpected error occurred: {e}", "involved_documents": []}]
+            logger.error(f"Error during instructor-based compliance check: {e}", exc_info=True)
+            
+            # Create error finding using our Pydantic model for consistency
+            try:
+                error_result = ComplianceResults(
+                    findings=[
+                        ComplianceFinding(
+                            rule_id="instructor_error",
+                            rule_checked="Instructor Processing Error",
+                            status=ComplianceStatus.ERROR,
+                            details=f"An error occurred during structured compliance evaluation: {e}",
+                            involved_documents=[doc.get('filename', 'unknown') for doc in all_documents_data],
+                            is_compliant=False
+                        )
+                    ],
+                    total_rules_evaluated=1
+                )
+                return [finding.model_dump() for finding in error_result.findings]
+            except Exception as fallback_error:
+                logger.error(f"Failed to create error result with Pydantic: {fallback_error}", exc_info=True)
+                return [{"rule_id": "N/A", "rule_checked": "Critical Error", "status": "error", "details": f"Critical error: {e}", "involved_documents": [], "is_compliant": False}]
+
+    async def check_all_compliance_structured(
+        self,
+        all_documents_data: List[Dict[str, Any]],
+        consolidated_rules: str
+    ) -> ComplianceResults:
+        """
+        Alternative method that returns structured Pydantic results directly.
+        Useful for future enhancements that want to work with typed objects.
+
+        Args:
+            all_documents_data: A list of dictionaries, where each dictionary contains
+                                'filename', 'doc_type', and 'extracted_data' for a document.
+            consolidated_rules: A string containing all compliance rules, typically numbered.
+
+        Returns:
+            A ComplianceResults object with structured, validated findings.
+        """
+        start_time = time.time()
+        
+        if not consolidated_rules.strip():
+            logger.info("No compliance rules provided. Returning empty results.")
+            return ComplianceResults(
+                findings=[],
+                total_rules_evaluated=0,
+                processing_metadata={"processing_time": 0.0}
+            )
+        
+        user_prompt = self._build_prompt_for_llm(all_documents_data, consolidated_rules)
+        
+        try:
+            api_start = time.time()
+            
+            compliance_results = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=self.temperature,
+                response_model=ComplianceResults,
+                max_retries=2
+            )
+            
+            api_duration = time.time() - api_start
+            total_duration = time.time() - start_time
+            
+            # Add processing metadata
+            compliance_results.processing_metadata.update({
+                "processing_time": total_duration,
+                "api_time": api_duration,
+                "model_used": self.model_name,
+                "structured_output": True
+            })
+            
+            logger.info(f"✅ Structured compliance check completed in {total_duration:.2f}s")
+            return compliance_results
+            
+        except Exception as e:
+            logger.error(f"Error during structured compliance check: {e}", exc_info=True)
+            
+            # Return error result with proper structure
+            return ComplianceResults(
+                findings=[
+                    ComplianceFinding(
+                        rule_id="error",
+                        rule_checked="Processing Error",
+                        status=ComplianceStatus.ERROR,
+                        details=f"Failed to process compliance rules: {e}",
+                        involved_documents=[doc.get('filename', 'unknown') for doc in all_documents_data],
+                        is_compliant=False
+                    )
+                ],
+                total_rules_evaluated=1,
+                processing_metadata={
+                    "processing_time": time.time() - start_time,
+                    "error": str(e),
+                    "structured_output": True
+                }
+            )
 
 
